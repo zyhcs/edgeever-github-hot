@@ -1,6 +1,6 @@
 {
   "name": "edgeever-github-hot",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Daily & Weekly GitHub Trending Digest plugin for EdgeEver with native AI & custom proxy support.",
   "main": "main.js",
   "scripts": {
