@@ -1,18 +1,33 @@
 /**
- * EdgeEver GitHub Hot Digest Plugin
- * 开源热搜日报 / GitHub Trending 深度技术周刊
- * 聚合 GitHub 实时开源热榜，通过 EdgeEver 原生 AI 或自定义代理智能提炼核心痛点、技术亮点与生态洞察，生成并保存高质量笔记。
+ * EdgeEver GitHub Hot Digest & Benchmark Plugin
+ * 开源热搜日报 / 周刊 / 月刊 & 竞品选型横向对比调研
+ * 聚合 GitHub 实时开源热榜（日榜/周榜/月榜）与自定义关键词检索（如 EdgeEver 对标知识库、AI Agent 等），
+ * 通过 EdgeEver 原生 AI 或自定义代理深度提炼技术亮点、横向对比矩阵与生态洞察。
  */
 
-// ==================== 1. 语言分类与配色配置 ====================
-const TECH_CATEGORIES = [
-  { id: "all", name: "🔥 全语言总榜", path: "", icon: "🔥" },
-  { id: "python", name: "🐍 Python (AI/深度学习)", path: "python", icon: "🐍" },
-  { id: "typescript", name: "🔷 TypeScript (全栈/前端)", path: "typescript", icon: "🔷" },
-  { id: "rust", name: "🦀 Rust (高性能/基础设施)", path: "rust", icon: "🦀" },
-  { id: "go", name: "🐹 Go (云原生/后端微服务)", path: "go", icon: "🐹" },
-  { id: "javascript", name: "🟨 JavaScript (现代Web)", path: "javascript", icon: "🟨" },
-  { id: "cpp", name: "⚡ C/C++ (底层引擎/计算)", path: "c++", icon: "⚡" },
+// ==================== 1. 分类配置与基础常量 ====================
+const PRESET_CATEGORIES = [
+  { id: "all", name: "🔥 全语言总榜", type: "trending", path: "", query: "" },
+  {
+    id: "custom_notes",
+    name: "📝 笔记/知识库 (EdgeEver对标)",
+    type: "search",
+    query: "markdown note OR knowledge base OR pkm OR local-first editor",
+    targetTerm: "开源笔记与知识库系统 (类似 EdgeEver)",
+  },
+  {
+    id: "custom_agent",
+    name: "🤖 AI Agent 与工作流",
+    type: "search",
+    query: "ai agent OR llm workflow OR mcp server",
+    targetTerm: "AI Agent 与自主智能体框架",
+  },
+  { id: "python", name: "🐍 Python (AI/深度学习)", type: "trending", path: "python" },
+  { id: "typescript", name: "🔷 TypeScript (全栈/前端)", type: "trending", path: "typescript" },
+  { id: "rust", name: "🦀 Rust (高性能/基础设施)", type: "trending", path: "rust" },
+  { id: "go", name: "🐹 Go (云原生/后端微服务)", type: "trending", path: "go" },
+  { id: "javascript", name: "🟨 JavaScript (现代Web)", type: "trending", path: "javascript" },
+  { id: "cpp", name: "⚡ C/C++ (底层引擎/计算)", type: "trending", path: "c++" },
 ];
 
 const LANG_COLORS = {
@@ -64,6 +79,11 @@ function formatChineseDate(date) {
   return `${year}年${month}月${day}日 ${weekDays[d.getDay()]}`;
 }
 
+function formatChineseMonth(date) {
+  const d = new Date(date || Date.now());
+  return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+}
+
 function getWeekNumber(date) {
   const d = new Date(date || Date.now());
   d.setHours(0, 0, 0, 0);
@@ -72,11 +92,29 @@ function getWeekNumber(date) {
   return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 }
 
-// ==================== 2. GitHub Trending 数据抓取与解析 ====================
-async function fetchTrendingFromGitHub(range = "daily", language = "all") {
-  const langObj = TECH_CATEGORIES.find((c) => c.id === language) || TECH_CATEGORIES[0];
-  const langPath = langObj.path ? encodeURIComponent(langObj.path) : "";
-  const sinceParam = range === "weekly" ? "weekly" : "daily";
+// ==================== 2. 数据抓取通道 (Trending 与 关键词搜索) ====================
+
+// 统一数据抓取入口
+async function fetchRepositories(options = {}) {
+  const { range = "daily", categoryId = "all", searchQuery = "" } = options;
+
+  // 1. 如果有明确的关键词搜索或者是预设的 search 分类
+  const catObj = PRESET_CATEGORIES.find((c) => c.id === categoryId);
+  const isSearchMode = Boolean(searchQuery.trim()) || (catObj && catObj.type === "search");
+
+  if (isSearchMode) {
+    const q = searchQuery.trim() || (catObj ? catObj.query : "");
+    return await searchRepositoriesOnGitHub(q);
+  }
+
+  // 2. 否则请求 GitHub Trending（支持 daily / weekly / monthly）
+  const langPath = catObj && catObj.path ? encodeURIComponent(catObj.path) : "";
+  return await fetchTrendingFromGitHub(range, langPath);
+}
+
+// 通道 A：GitHub Trending (日榜 / 周榜 / 月榜)
+async function fetchTrendingFromGitHub(range = "daily", langPath = "") {
+  const sinceParam = range === "monthly" ? "monthly" : range === "weekly" ? "weekly" : "daily";
   const url = `https://github.com/trending${langPath ? "/" + langPath : ""}?since=${sinceParam}`;
 
   let html = "";
@@ -93,25 +131,22 @@ async function fetchTrendingFromGitHub(range = "daily", language = "all") {
       html = await res.text();
     }
   } catch (err) {
-    console.warn("[GitHub Hot] Direct fetch failed, will try fallback:", err);
+    console.warn("[GitHub Hot] Trending fetch failed, will try search fallback:", err);
   }
 
-  // 如果直连拉取成功，使用 DOMParser / 正则提取
   if (html && html.includes("Box-row")) {
     const items = parseTrendingHtml(html, range);
-    if (items.length > 0) {
-      return items;
-    }
+    if (items.length > 0) return items;
   }
 
-  // 备用兜底策略：调用 GitHub 官方 Search API 按照 Star 增量降序补齐
-  return await fetchTrendingFallback(range, language);
+  // Fallback 策略
+  return await fetchTrendingFallback(range, langPath);
 }
 
 function parseTrendingHtml(html, range) {
   const items = [];
+  const periodLabel = range === "monthly" ? "本月热搜" : range === "weekly" ? "本周热搜" : "今日热搜";
 
-  // 浏览器 / EdgeEver 客户端环境优先使用 DOMParser
   if (typeof DOMParser !== "undefined") {
     try {
       const parser = new DOMParser();
@@ -140,11 +175,7 @@ function parseTrendingHtml(html, range) {
         if (starLinks.length >= 2) forks = starLinks[1].textContent.trim();
 
         const periodEl = row.querySelector("span.d-inline-block.float-sm-right");
-        const periodText = periodEl
-          ? periodEl.textContent.trim()
-          : range === "weekly"
-          ? "本周热搜推荐"
-          : "今日热搜推荐";
+        const periodText = periodEl ? periodEl.textContent.trim() : `${periodLabel}推荐`;
 
         const starMatch = periodText.match(/([\d,]+)\s+stars/i);
         const periodStars = starMatch ? starMatch[1] : totalStars;
@@ -167,11 +198,11 @@ function parseTrendingHtml(html, range) {
 
       if (items.length > 0) return items;
     } catch (e) {
-      console.warn("[GitHub Hot] DOMParser failed, using regex fallback:", e);
+      console.warn("[GitHub Hot] DOMParser parse error:", e);
     }
   }
 
-  // 纯正则解析 fallback（确保 Node / 极端环境下均 100% 可用）
+  // 正则解析 fallback
   const parts = html.split('<article class="Box-row"').slice(1);
   parts.forEach((part, idx) => {
     const repoMatch = part.match(/href="\/([^"\/\s]+\/[^"\/\s]+)"/);
@@ -187,11 +218,9 @@ function parseTrendingHtml(html, range) {
     const langMatch = part.match(/itemprop="programmingLanguage">([^<]+)<\/span>/);
     const language = langMatch ? langMatch[1].trim() : "Other";
 
-    const periodMatch = part.match(/(\d[\d,]*)\s+stars\s+(?:today|this week)/i);
+    const periodMatch = part.match(/(\d[\d,]*)\s+stars\s+(?:today|this week|this month)/i);
     const periodStars = periodMatch ? periodMatch[1] : "";
-    const periodText = periodMatch
-      ? `+${periodMatch[1]} stars ${range === "weekly" ? "this week" : "today"}`
-      : "热搜项目";
+    const periodText = periodMatch ? `+${periodMatch[1]} stars` : `${periodLabel}推荐`;
 
     items.push({
       rank: idx + 1,
@@ -212,12 +241,102 @@ function parseTrendingHtml(html, range) {
   return items;
 }
 
-// 降级兜底：GitHub Search API
-async function fetchTrendingFallback(range, language) {
+// 通道 B：GitHub 关键词搜索 (用于特定领域对标，如 edgeever 知识库、agent 等)
+async function searchRepositoriesOnGitHub(query) {
+  const cleanQ = query.trim();
+  if (!cleanQ) return [];
+
+  // 策略 1：拉取 GitHub 现代 Web Search 页面中的 embedded JSON（无频控、字段全）
   try {
-    const days = range === "weekly" ? 7 : 2;
+    const webUrl = `https://github.com/search?q=${encodeURIComponent(cleanQ)}&type=repositories&s=stars&o=desc`;
+    const res = await fetch(webUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+
+    if (res.ok) {
+      const html = await res.text();
+      const match = html.match(/data-target="react-app\.embeddedData">([\s\S]*?)<\/script>/);
+      if (match) {
+        const json = JSON.parse(match[1]);
+        const results = json.payload?.blackbirdSearchRoute?.results || json.payload?.results || [];
+        if (results.length > 0) {
+          return results.map((item, idx) => {
+            const fullName = item.hl_name ? item.hl_name.replace(/<\/?em>/g, "") : `${item.repo?.repository?.owner_login}/${item.repo?.repository?.name}`;
+            const [owner, repo] = fullName.split("/");
+            const desc = (item.hl_trunc_description || item.repo?.repository?.description || "").replace(/<\/?em>/g, "");
+            const stars = item.followers || item.repo?.repository?.stargazers_count || 0;
+            const lang = item.language || "Other";
+
+            return {
+              rank: idx + 1,
+              owner: owner || "",
+              repo: repo || fullName,
+              fullName,
+              url: `https://github.com/${fullName}`,
+              description: desc || "暂无项目描述",
+              language: lang,
+              languageColor: item.color || getLanguageColor(lang),
+              totalStars: Number(stars).toLocaleString(),
+              forks: "",
+              periodStars: Number(stars).toLocaleString(),
+              periodText: `⭐ ${Number(stars).toLocaleString()} stars`,
+              topics: item.topics || [],
+            };
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[GitHub Hot] Web search failed, trying Search API:", err);
+  }
+
+  // 策略 2：GitHub 官方 REST API 兜底
+  try {
+    const apiUrl = `https://api.github.com/search/repositories?q=${encodeURIComponent(cleanQ)}&sort=stars&order=desc&per_page=15`;
+    const apiRes = await fetch(apiUrl, {
+      headers: {
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "EdgeEver-GitHub-Hot",
+      },
+    });
+
+    if (apiRes.ok) {
+      const data = await apiRes.json();
+      if (data.items && data.items.length > 0) {
+        return data.items.map((it, idx) => ({
+          rank: idx + 1,
+          owner: it.owner?.login || "",
+          repo: it.name || "",
+          fullName: it.full_name || "",
+          url: it.html_url || `https://github.com/${it.full_name}`,
+          description: it.description || "暂无项目描述",
+          language: it.language || "Other",
+          languageColor: getLanguageColor(it.language),
+          totalStars: it.stargazers_count ? it.stargazers_count.toLocaleString() : "0",
+          forks: it.forks_count ? it.forks_count.toLocaleString() : "0",
+          periodStars: it.stargazers_count ? it.stargazers_count.toLocaleString() : "0",
+          periodText: `⭐ ${it.stargazers_count?.toLocaleString()} stars`,
+          topics: it.topics || [],
+        }));
+      }
+    }
+  } catch (err) {
+    console.error("[GitHub Hot] GitHub Search API error:", err);
+  }
+
+  return [];
+}
+
+// Trending 备用兜底
+async function fetchTrendingFallback(range, langPath) {
+  try {
+    const days = range === "monthly" ? 30 : range === "weekly" ? 7 : 2;
     const pastDate = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().split("T")[0];
-    const langQuery = language && language !== "all" ? `+language:${language}` : "";
+    const langQuery = langPath ? `+language:${langPath}` : "";
     const searchUrl = `https://api.github.com/search/repositories?q=created:>${pastDate}${langQuery}&sort=stars&order=desc&per_page=15`;
 
     const res = await fetch(searchUrl, {
@@ -243,7 +362,7 @@ async function fetchTrendingFallback(range, language) {
       totalStars: repo.stargazers_count ? repo.stargazers_count.toLocaleString() : "0",
       forks: repo.forks_count ? repo.forks_count.toLocaleString() : "0",
       periodStars: repo.stargazers_count ? repo.stargazers_count.toLocaleString() : "0",
-      periodText: range === "weekly" ? "本周新增关注" : "今日新增关注",
+      periodText: range === "monthly" ? "本月新增关注" : range === "weekly" ? "本周新增关注" : "今日新增关注",
     }));
   } catch (err) {
     console.error("[GitHub Hot] Fallback API error:", err);
@@ -251,103 +370,144 @@ async function fetchTrendingFallback(range, language) {
   }
 }
 
-// ==================== 3. AI 提示词工程与报告生成 ====================
-function buildAiPrompt(items, range = "daily", language = "all") {
-  const isWeekly = range === "weekly";
+// ==================== 3. AI 提示词工程 (速报 vs 竞品对标调研) ====================
+function buildAiPrompt(items, options = {}) {
+  const { range = "daily", reportStyle = "digest", categoryName = "全语言总榜", searchTerm = "" } = options;
+
   const dateStr = formatChineseDate();
+  const monthStr = formatChineseMonth();
   const weekNum = getWeekNumber();
-  const langObj = TECH_CATEGORIES.find((c) => c.id === language) || TECH_CATEGORIES[0];
 
-  const titleProposal = isWeekly
-    ? `GitHub 本周开源技术趋势周刊 · 第 ${weekNum} 周 (${dateStr})`
-    : `GitHub 开源热搜日报 · ${dateStr}`;
+  // 判断是否为竞品对标调研报告模式
+  const isBenchmark = reportStyle === "benchmark" || Boolean(searchTerm);
 
-  const system = `你是全球开源软件与系统架构资深技术主编，擅长从海量 GitHub 代码库中洞察技术演进趋势，提炼高含金量、地道专业的中文技术速评。
+  let titleProposal = "";
+  if (isBenchmark) {
+    const topicLabel = searchTerm || categoryName.replace(/^[^\s]+\s*/, "");
+    titleProposal = `《${topicLabel}》开源生态全景调研与竞品横向对比报告 · ${dateStr}`;
+  } else if (range === "monthly") {
+    titleProposal = `GitHub 开源黑马与技术演进月刊 · ${monthStr}`;
+  } else if (range === "weekly") {
+    titleProposal = `GitHub 本周开源技术趋势周刊 · 第 ${weekNum} 周 (${dateStr})`;
+  } else {
+    titleProposal = `GitHub 开源热搜日报 · ${dateStr}`;
+  }
 
-你正在为技术团队与开发者撰写一份高质量的《${isWeekly ? "开源技术趋势周刊" : "开源热搜日报"}》。
-输入数据是当前 GitHub 热搜排行的原始项目列表。文章必须逻辑严密、排版精致、层次清晰、中文纯正专业。
+  // 竞品对标调研模式专用的 System Prompt
+  const benchmarkSystemPrompt = `你是全球开源软件与知识管理技术专家、系统级架构师，擅长针对特定技术赛道（如知识库系统、Markdown 笔记、AI Agent、Local-First 架构等）进行严谨深度、客观专业的竞品横向对比与技术选型调研。
+
+你的任务是为开发者与技术架构师撰写一份高质量的《开源生态全景调研与竞品横向对比报告》。
+输入数据为该赛道全网最知名或近期飙升的代表性 GitHub 开源项目列表。
+
+【报告排版与深度架构要求】：
+1. 必须直接输出纯粹标准的 Markdown 正文，绝对禁止使用代码块包裹整篇文章。
+2. 篇首输出大标题：
+   # 🔍 ${titleProposal}
+3. 【一、赛道生态现状与演进脉络】：
+   深入提炼该领域的发展现状、技术流派分歧（例如以 EdgeEver 为代表的本地优先 Local-First 与云端协作的区别、纯 Markdown 与块级富文本的架构选型、可扩展插件体系等），文字需有很强的专业洞察力。
+4. 【二、核心竞品横向对比全景矩阵】（必须输出一张完整的 Markdown 表格）：
+   包含列：【项目名称】、【核心技术栈与架构】、【数据存储与离线模式】、【插件/二次开发生态】、【核心杀手级亮点】、【主要局限/不足】、【最适合人群/场景】。
+5. 【三、重点标杆项目深度拆解与评测】：
+   对入选项目逐一进行深度剖析，二级标题格式：
+   ## 01 | 仓库名 · 产品定位与核心哲学
+   > 🏷️ **技术栈**：...  ·  ⭐ **Star规模**：...  ·  🔗 **仓库直达**：[完整仓库名](URL)
+   - 💡 **为什么开发者选择它（核心击中痛点）**：
+   - ⚡ **架构与技术实现亮点（如存储机制、渲染性能、同步方案）**：
+   - ⚖️ **与同类标杆（如 EdgeEver / Obsidian / Notion）的核心差异**：
+   - 🎯 **典型落地场景与建议**：
+   每个项目解读结束后输出一条分割线“---”。
+6. 【四、多维度技术选型决策指南】：
+   根据不同诉求给出直接明确的选型指引（如：如果你重视 100% 数据隐私与离线优先...；如果你重视全自动化与 AI 插件集成...；如果你需要轻量自托管...）。
+7. 【五、总结与前瞻思考】。`;
+
+  // 常规热点速报模式专用的 System Prompt
+  const digestSystemPrompt = `你是全球开源软件与系统架构资深技术主编，擅长从 GitHub 代码库中洞察技术演进趋势，提炼高含金量、地道专业的中文技术速评。
+
+你正在撰写一份高质量的《${range === "monthly" ? "开源演进月刊" : range === "weekly" ? "开源技术趋势周刊" : "开源热搜日报"}》。
+输入数据为 GitHub 实时热搜项目列表。
 
 【排版与结构要求】：
-1. 报告必须直接以标准 Markdown 输出，不要使用外部代码块反引号包裹整个输出。
-2. 篇首输出标题：
-   # ${isWeekly ? "🚀 " : "🌅 "}${titleProposal}
-3. 接着输出【🌟 本期生态洞察与技术风向标】：
-   提炼 3 条高度凝练的宏观技术趋势观察（例如 AI Agent 端侧演进、Rust 重构基础工具生态、现代 Web 开发范式等），每条使用粗体开头并附带 2 句话深度洞察。
-4. 核心部分【🔥 精选开源黑马深度拆解】：
-   严格对选入的每个项目按重要性逐一解读，二级标题格式必须为：
-   ## 01 | 仓库名 · 一句话精准中文定位与杀手级功能
-   紧随其后输出信息徽标引用行：
-   > 🏷️ **语言**：项目主要语言  ·  ⭐ **热度**：今日或本周Star增量  ·  🔗 **仓库**：[完整仓库名](URL)
-   针对该项目提炼 3 个专业维度要点：
-   - 💡 **解决的核心痛点**：为什么该项目在短时间内引爆全网？击中了开发者的什么痛点？
-   - ⚡ **技术选型与架构亮点**：有哪些精妙的架构、性能优化或设计模式？
-   - 🎯 **适用场景与探索建议**：哪些开发者适合在哪些项目场景中尝试？
-   每个项目解读结束后，使用一条纯分割线“---”进行视觉隔断。
-5. 篇末输出【📊 本期热榜全景速览】：
-   使用清晰的 Markdown 表格汇总所有项目：包含列（排名、仓库名、语言、周期Star增量、一句话定位）。
-6. 篇末结语【🧭 探索指引】：
-   一句话简明有力的开源寄语。
-7. 忠于事实，严禁凭空捏造不存在的功能与作者信息，遇到英文专业术语保留原词或标准中英对照。`;
+1. 直接输出标准 Markdown 正文，不要包裹在外部代码块中。
+2. 篇首标题：
+   # ${range === "monthly" ? "🌕 " : range === "weekly" ? "🚀 " : "🌅 "}${titleProposal}
+3. 【🌟 本期生态洞察与技术风向标】：
+   提炼 3 条宏观技术趋势观察，粗体开头并附带深度洞察。
+4. 【🔥 精选开源黑马深度拆解】：
+   按“## 01 | 仓库名 · 一句话精准中文定位”顺序逐一拆解，包含引用信息行（语言、热度增量、仓库链接），以及：
+   - 💡 **解决的核心痛点**
+   - ⚡ **技术选型与架构亮点**
+   - 🎯 **适用场景与探索建议**
+   每个项目后使用“---”分割。
+5. 【📊 本期热榜全景速览】：Markdown 表格汇总。
+6. 【🧭 结语与探索指引】。`;
+
+  const system = isBenchmark ? benchmarkSystemPrompt : digestSystemPrompt;
 
   const promptData = {
-    reportType: isWeekly ? "Weekly Digest" : "Daily Digest",
+    reportType: isBenchmark ? "Competitive Benchmark Report" : "Trending Digest",
+    topic: searchTerm || categoryName,
+    range,
     date: dateStr,
-    category: langObj.name,
     totalItems: items.length,
     repositories: items.map((it, idx) => ({
       rank: idx + 1,
       fullName: it.fullName,
       url: it.url,
       language: it.language,
-      starsGain: it.periodText,
+      stars: it.periodText || it.totalStars,
       totalStars: it.totalStars,
-      rawDescription: it.description,
+      description: it.description,
+      topics: it.topics || [],
     })),
   };
 
-  return { system, prompt: JSON.stringify(promptData, null, 2), titleProposal };
+  return { system, prompt: JSON.stringify(promptData, null, 2), titleProposal, isBenchmark };
 }
 
 // 调用 AI 模型生成完整 Markdown 报告
 async function callAiEngine(context, items, options = {}, progressCallback = () => {}) {
-  const { range = "daily", language = "all", provider = "edgeever", customSettings = {} } = options;
-  const { system, prompt, titleProposal } = buildAiPrompt(items, range, language);
+  const { provider = "edgeever", customSettings = {} } = options;
+  const { system, prompt, titleProposal, isBenchmark } = buildAiPrompt(items, options);
 
-  progressCallback("正在构建深度分析数据并连接 AI 引擎...");
+  progressCallback(
+    isBenchmark
+      ? "正在汇总多维度竞品指标，启动 AI 进行全景架构与技术选型对比..."
+      : "正在构建深度分析数据并连接 AI 引擎..."
+  );
 
   // 1. EdgeEver 客户端原生 AI 模型
   if (provider === "edgeever") {
     if (!context.ai || typeof context.ai.generate !== "function") {
-      throw new Error("当前 EdgeEver 版本未检测到 context.ai 模块，请检查 EdgeEver 客户端或切换为自定义 API 模式。");
+      throw new Error("当前 EdgeEver 版本未检测到 context.ai 模块，请检查客户端或切换为自定义 API 模式。");
     }
 
     try {
       const status = await context.ai.status();
       if (!status || !status.configured) {
         throw new Error(
-          "EdgeEver 尚未配置默认 AI 模型！请在 EdgeEver 工作区左下角「设置 -> AI」中配置模型，或在插件中切换为「自定义 OpenAI 兼容代理」。"
+          "EdgeEver 尚未配置默认 AI 模型！请在 EdgeEver 工作区左下角「设置 -> AI」中配置模型，或切换为「自定义 OpenAI 兼容代理」。"
         );
       }
     } catch (e) {
       if (e.message && e.message.includes("尚未配置")) throw e;
     }
 
-    progressCallback("EdgeEver AI 模型正在深度解读开源架构与生态趋势...");
+    progressCallback("EdgeEver AI 模型正在深度推理与构建横向对比矩阵...");
     const res = await context.ai.generate({
       system,
       prompt,
-      maxOutputTokens: 6000,
+      maxOutputTokens: 7000,
     });
 
     if (!res || !res.text) {
       throw new Error("EdgeEver AI 生成返回为空，请稍后重试。");
     }
 
-    return { text: res.text, title: titleProposal };
+    return { text: res.text, title: titleProposal, isBenchmark };
   }
 
-  // 2. 自定义 OpenAI 兼容代理 / 外部 API
-  progressCallback("正在向自定义 AI 代理发送热榜分析请求...");
+  // 2. 自定义 OpenAI 兼容代理
+  progressCallback("正在向自定义 AI 代理发送深度分析请求...");
   const baseUrl = (customSettings.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
   const apiKey = (customSettings.apiKey || "").trim();
   const model = (customSettings.model || "gpt-4o-mini").trim();
@@ -369,8 +529,8 @@ async function callAiEngine(context, items, options = {}, progressCallback = () 
         { role: "system", content: system },
         { role: "user", content: prompt },
       ],
-      temperature: 0.6,
-      max_tokens: 4096,
+      temperature: 0.5,
+      max_tokens: 5000,
     }),
   });
 
@@ -385,16 +545,17 @@ async function callAiEngine(context, items, options = {}, progressCallback = () 
     throw new Error("自定义 AI 代理未返回任何有效文本内容。");
   }
 
-  return { text, title: titleProposal };
+  return { text, title: titleProposal, isBenchmark };
 }
 
 // ==================== 4. 笔记保存与归档 ====================
-async function saveReportToNote(context, reportTitle, reportMarkdown, range = "daily") {
-  const isWeekly = range === "weekly";
+async function saveReportToNote(context, reportTitle, reportMarkdown, options = {}) {
+  const { range = "daily", isBenchmark = false } = options;
   const todayStr = formatDate();
+  const monthStr = formatChineseMonth();
   const weekNum = getWeekNumber();
 
-  // 1. 获取目标笔记本
+  // 1. 匹配目标笔记本
   let targetNotebookId = "";
   try {
     const savedId = await context.settings.get("target_notebook_id");
@@ -404,8 +565,7 @@ async function saveReportToNote(context, reportTitle, reportMarkdown, range = "d
   if (!targetNotebookId) {
     try {
       const notebooks = (await context.notebooks.list()) || [];
-      // 优先匹配名称包含“热榜”、“开源”或“日报”的笔记本
-      const matched = notebooks.find((nb) => /(热榜|开源|日报|weekly|trending)/i.test(nb.name));
+      const matched = notebooks.find((nb) => /(热榜|开源|日报|weekly|monthly|调研|竞品)/i.test(nb.name));
       if (matched) {
         targetNotebookId = matched.id;
       } else if (notebooks.length > 0) {
@@ -416,17 +576,25 @@ async function saveReportToNote(context, reportTitle, reportMarkdown, range = "d
     }
   }
 
-  // 2. 标签系统
-  const tags = isWeekly
-    ? ["GitHub热榜", "开源周报", `W${weekNum}`, todayStr.slice(0, 7)]
-    : ["GitHub热榜", "开源日报", todayStr];
+  // 2. 标签分类
+  let tags = [];
+  if (isBenchmark) {
+    tags = ["GitHub热榜", "竞品调研", "技术选型", todayStr];
+  } else if (range === "monthly") {
+    tags = ["GitHub热榜", "开源月刊", monthStr];
+  } else if (range === "weekly") {
+    tags = ["GitHub热榜", "开源周报", `W${weekNum}`, todayStr.slice(0, 7)];
+  } else {
+    tags = ["GitHub热榜", "开源日报", todayStr];
+  }
 
-  // 3. 检查当天是否存在同类笔记，智能更新（防重复创建）
+  // 3. 检查当天是否存在同类笔记（智能防重复更新）
   let existingNote = null;
   try {
+    const queryTags = isBenchmark ? ["竞品调研", todayStr] : tags.slice(1, 3);
     const queryRes = await context.notes.query({
       notebookId: targetNotebookId || undefined,
-      tags: [isWeekly ? "开源周报" : "开源日报", isWeekly ? `W${weekNum}` : todayStr],
+      tags: queryTags,
       limit: 5,
     });
     if (queryRes && queryRes.notes && queryRes.notes.length > 0) {
@@ -455,10 +623,31 @@ async function saveReportToNote(context, reportTitle, reportMarkdown, range = "d
   return { noteId: finalNoteId, isUpdated: Boolean(existingNote) };
 }
 
-// 简易 Markdown 转排版 HTML 预览
+// 简易 Markdown 转排版 HTML 预览 (支持表格)
 function renderMarkdownBasic(md) {
   if (!md) return "";
   let html = escapeHtml(md);
+
+  // 表格处理
+  html = html.replace(/((?:\|[^\n]+\|\r?\n)+)/g, (tableMatch) => {
+    const lines = tableMatch.trim().split("\n");
+    if (lines.length < 2) return tableMatch;
+
+    let tableHtml = "<table>";
+    let isHeader = true;
+
+    lines.forEach((line) => {
+      if (/^\|[-:\s|]+\|$/.test(line.trim())) {
+        isHeader = false;
+        return;
+      }
+      const cells = line.split("|").slice(1, -1);
+      const tag = isHeader ? "th" : "td";
+      tableHtml += "<tr>" + cells.map((c) => `<${tag}>${c.trim()}</${tag}>`).join("") + "</tr>";
+    });
+    tableHtml += "</table>";
+    return tableHtml;
+  });
 
   // 标题
   html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
@@ -492,14 +681,17 @@ function renderMarkdownBasic(md) {
 function openConsoleModal(context) {
   document.querySelectorAll(".edgeever-gh-modal-backdrop").forEach((el) => el.remove());
 
-  let currentRange = "daily";
-  let currentLanguage = "all";
+  let currentRange = "daily"; // "daily" | "weekly" | "monthly"
+  let currentCategoryId = "all";
+  let currentSearchQuery = "";
+  let currentReportStyle = "digest"; // "digest" | "benchmark"
   let currentMaxItems = 10;
   let currentProvider = "edgeever";
   let trendingItems = [];
   let generatedReport = null;
   let activeTab = "cards"; // "cards" | "report"
   let isGenerating = false;
+  let userCustomKeywords = ["markdown note", "knowledge base", "pkm", "ai agent", "mcp"];
 
   const backdrop = document.createElement("div");
   backdrop.className = "edgeever-gh-modal-backdrop";
@@ -516,20 +708,23 @@ function openConsoleModal(context) {
           </div>
           <div class="edgeever-gh-title-group">
             <h2>
-              开源热搜日报
-              <span class="edgeever-gh-version-badge">GitHub Hot</span>
+              开源热搜与竞品调研
+              <span class="edgeever-gh-version-badge">v1.1.0</span>
             </h2>
-            <div class="edgeever-gh-subtitle">聚合 GitHub 最新开源热榜，通过 AI 深度提炼架构亮点与技术趋势</div>
+            <div class="edgeever-gh-subtitle">GitHub 开源热榜 (日/周/月) & 竞品对标调研，AI 深度横向对比</div>
           </div>
         </div>
 
-        <!-- 周期 Tab 切换 -->
+        <!-- 周期 Tab 切换 (增加月度特刊) -->
         <div class="edgeever-gh-range-tabs">
           <button type="button" class="edgeever-gh-tab-btn is-active" data-range="daily">
-            <span>🌅 昨日热搜日报</span>
+            <span>🌅 昨日日报</span>
           </button>
           <button type="button" class="edgeever-gh-tab-btn" data-range="weekly">
-            <span>🚀 本周技术周刊</span>
+            <span>🚀 本周周报</span>
+          </button>
+          <button type="button" class="edgeever-gh-tab-btn" data-range="monthly">
+            <span>🌕 最近一月</span>
           </button>
         </div>
 
@@ -541,19 +736,61 @@ function openConsoleModal(context) {
         <!-- 左侧：筛选与参数控制 -->
         <div class="edgeever-gh-sidebar">
           <div class="edgeever-gh-sidebar-scroll">
+            <!-- 搜索与自定义关键词 -->
+            <div class="edgeever-gh-form-item">
+              <label class="edgeever-gh-form-label">
+                🔍 自定义关键词搜索 / 对标
+                <span class="edgeever-gh-form-hint">搜项目或竞品</span>
+              </label>
+              <div class="edgeever-gh-search-box">
+                <input
+                  type="text"
+                  class="edgeever-gh-search-input"
+                  id="ee-keyword-input"
+                  placeholder="如：edgeever, markdown note, pkm"
+                />
+                <button type="button" class="edgeever-gh-search-clear" id="ee-search-clear" style="display:none;" title="清空">✕</button>
+                <button type="button" class="edgeever-gh-search-btn" id="ee-btn-search">搜索</button>
+              </div>
+
+              <!-- 常用对标关键词标签云 -->
+              <div class="edgeever-gh-custom-tags-wrap" id="ee-custom-tags-container"></div>
+            </div>
+
             <!-- 技术分类胶囊 -->
             <div class="edgeever-gh-form-item">
               <label class="edgeever-gh-form-label">
-                技术分类 / 编程语言
+                预设分类 / 热门技术栈
                 <span class="edgeever-gh-form-hint" id="ee-selected-lang-name">🔥 全语言</span>
               </label>
               <div class="edgeever-gh-capsule-grid" id="ee-capsule-grid"></div>
             </div>
 
+            <!-- AI 报告模式选择 (速报 vs 竞品横向对比选型) -->
+            <div class="edgeever-gh-form-item">
+              <label class="edgeever-gh-form-label">AI 报告生成模式</label>
+              <div class="edgeever-gh-style-selector">
+                <label class="edgeever-gh-style-option is-active" id="ee-opt-digest">
+                  <input type="radio" name="reportStyle" value="digest" checked />
+                  <div>
+                    <div class="edgeever-gh-style-title">📊 综合技术热点速报</div>
+                    <div class="edgeever-gh-style-desc">适合常规每日/每周/每月热榜，提炼风向与项目精析</div>
+                  </div>
+                </label>
+                <label class="edgeever-gh-style-option" id="ee-opt-benchmark">
+                  <input type="radio" name="reportStyle" value="benchmark" />
+                  <div>
+                    <div class="edgeever-gh-style-title">⚔️ 竞品横向对比与选型调研</div>
+                    <div class="edgeever-gh-style-desc">深度生成对比矩阵表、架构差异与选型决策指南</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
             <!-- 入选项目数量 -->
             <div class="edgeever-gh-form-item">
               <label class="edgeever-gh-form-label">
-                精选入选项目数量
+                精选入选项目上限
                 <span class="edgeever-gh-form-hint" id="ee-items-count-hint">Top 10</span>
               </label>
               <div class="edgeever-gh-segment-bar" id="ee-items-segment">
@@ -573,7 +810,7 @@ function openConsoleModal(context) {
               </select>
             </div>
 
-            <!-- 自定义代理参数面板 (按需显示) -->
+            <!-- 自定义代理参数面板 -->
             <div id="ee-custom-ai-panel" style="display: none; flex-direction: column; gap: 8px;">
               <div class="edgeever-gh-form-item">
                 <label class="edgeever-gh-form-label">代理 API 端点 Base URL</label>
@@ -601,10 +838,10 @@ function openConsoleModal(context) {
           <!-- 左侧底部操作栏 -->
           <div class="edgeever-gh-sidebar-footer">
             <button type="button" class="edgeever-gh-btn-primary" id="ee-btn-generate-ai">
-              <span>🚀 立即由 AI 深度生成日报</span>
+              <span>🚀 立即由 AI 深度生成文章</span>
             </button>
             <button type="button" class="edgeever-gh-btn-secondary" id="ee-btn-refresh-data">
-              <span>🔄 重新抓取 GitHub 热榜</span>
+              <span>🔄 重新抓取数据</span>
             </button>
           </div>
         </div>
@@ -614,10 +851,10 @@ function openConsoleModal(context) {
           <div class="edgeever-gh-pane-header">
             <div class="edgeever-gh-view-toggle">
               <div class="edgeever-gh-view-tab is-active" id="ee-tab-cards">
-                🔥 实时热榜卡片流 (<span id="ee-card-count-badge">0</span>)
+                🔥 实时开源项目流 (<span id="ee-card-count-badge">0</span>)
               </div>
               <div class="edgeever-gh-view-tab" id="ee-tab-report">
-                📄 AI 深度日报预览
+                📄 AI 报告与对比预览
               </div>
             </div>
 
@@ -633,23 +870,23 @@ function openConsoleModal(context) {
 
           <!-- 滚动视图 -->
           <div class="edgeever-gh-scroll-area">
-            <!-- 视图 1：实时热榜卡片列表 -->
+            <!-- 视图 1：卡片流 -->
             <div class="edgeever-gh-cards-stream" id="ee-cards-container">
               <div style="padding: 40px; text-align: center; color: var(--ee-gh-text-muted);">
-                正在连接 GitHub 拉取最新开源热榜...
+                正在连接 GitHub 拉取开源数据...
               </div>
             </div>
 
             <!-- 视图 2：AI 生成报告 -->
             <div class="edgeever-gh-report-paper" id="ee-report-container" style="display: none;"></div>
 
-            <!-- 视图 3：生成中流光加载提示 -->
+            <!-- 视图 3：加载中动效 -->
             <div class="edgeever-gh-ai-loading-box" id="ee-loading-box" style="display: none;">
               <div class="edgeever-gh-ai-spinner"></div>
               <div class="edgeever-gh-loading-title" id="ee-loading-title">正在由 AI 提炼技术风向标...</div>
               <div class="edgeever-gh-progress-pill" id="ee-loading-pill">EdgeEver AI Reasoning Engine</div>
               <div class="edgeever-gh-loading-desc" id="ee-loading-desc">
-                正在深度剖析仓库痛点、架构选型、Star 激增动因与应用场景，稍候即可生成完整日报...
+                正在深度剖析痛点、技术架构与竞品差异，稍候即可生成完整 Markdown 报告...
               </div>
             </div>
           </div>
@@ -660,10 +897,16 @@ function openConsoleModal(context) {
 
   document.body.appendChild(backdrop);
 
-  // DOM 节点引用
+  // 节点引用
   const rangeTabs = backdrop.querySelectorAll(".edgeever-gh-tab-btn");
+  const keywordInput = backdrop.querySelector("#ee-keyword-input");
+  const searchClearBtn = backdrop.querySelector("#ee-search-clear");
+  const btnSearch = backdrop.querySelector("#ee-btn-search");
+  const customTagsContainer = backdrop.querySelector("#ee-custom-tags-container");
   const capsuleGrid = backdrop.querySelector("#ee-capsule-grid");
   const selectedLangName = backdrop.querySelector("#ee-selected-lang-name");
+  const optDigest = backdrop.querySelector("#ee-opt-digest");
+  const optBenchmark = backdrop.querySelector("#ee-opt-benchmark");
   const itemsSegment = backdrop.querySelector("#ee-items-segment");
   const itemsCountHint = backdrop.querySelector("#ee-items-count-hint");
   const aiProviderSelect = backdrop.querySelector("#ee-ai-provider-select");
@@ -683,17 +926,19 @@ function openConsoleModal(context) {
   const reportContainer = backdrop.querySelector("#ee-report-container");
   const loadingBox = backdrop.querySelector("#ee-loading-box");
   const loadingTitle = backdrop.querySelector("#ee-loading-title");
-  const loadingDesc = backdrop.querySelector("#ee-loading-desc");
   const btnClose = backdrop.querySelector(".edgeever-gh-close-btn");
 
-  // 加载已保存设置
+  // 加载设置与笔记本
   async function initSettingsAndNotebooks() {
     try {
       const defRange = await context.settings.get("default_range");
       if (defRange) currentRange = String(defRange);
 
       const defLang = await context.settings.get("default_language");
-      if (defLang) currentLanguage = String(defLang);
+      if (defLang) currentCategoryId = String(defLang);
+
+      const defStyle = await context.settings.get("default_report_style");
+      if (defStyle) currentReportStyle = String(defStyle);
 
       const maxIt = await context.settings.get("max_items");
       if (maxIt) currentMaxItems = parseInt(maxIt, 10) || 10;
@@ -709,6 +954,14 @@ function openConsoleModal(context) {
 
       const mod = await context.settings.get("custom_ai_model");
       if (mod) customModel.value = String(mod);
+
+      const kwStr = await context.settings.get("custom_keywords");
+      if (kwStr) {
+        userCustomKeywords = String(kwStr)
+          .split(/[,，\n]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
     } catch (e) {}
 
     // 笔记本下拉
@@ -727,6 +980,8 @@ function openConsoleModal(context) {
       btn.classList.toggle("is-active", btn.dataset.range === currentRange);
     });
 
+    setReportStyle(currentReportStyle);
+
     itemsSegment.querySelectorAll("button").forEach((btn) => {
       btn.classList.toggle("is-active", parseInt(btn.dataset.limit, 10) === currentMaxItems);
     });
@@ -736,33 +991,76 @@ function openConsoleModal(context) {
     customAiPanel.style.display = currentProvider === "custom" ? "flex" : "none";
   }
 
-  // 渲染分类胶囊
+  function setReportStyle(style) {
+    currentReportStyle = style;
+    optDigest.classList.toggle("is-active", style === "digest");
+    optBenchmark.classList.toggle("is-active", style === "benchmark");
+    optDigest.querySelector("input").checked = style === "digest";
+    optBenchmark.querySelector("input").checked = style === "benchmark";
+  }
+
+  optDigest.onclick = () => setReportStyle("digest");
+  optBenchmark.onclick = () => setReportStyle("benchmark");
+
+  // 渲染常用关键词标签云
+  function renderCustomTags() {
+    customTagsContainer.innerHTML = "";
+    userCustomKeywords.forEach((kw) => {
+      const chip = document.createElement("span");
+      chip.className = `edgeever-gh-tag-chip ${currentSearchQuery === kw ? "is-active" : ""}`;
+      chip.innerHTML = `
+        <span>${escapeHtml(kw)}</span>
+      `;
+      chip.onclick = () => {
+        keywordInput.value = kw;
+        searchClearBtn.style.display = "flex";
+        currentSearchQuery = kw;
+        // 自动推荐开启“竞品横向对比与选型调研模式”
+        setReportStyle("benchmark");
+        renderCustomTags();
+        loadData();
+      };
+      customTagsContainer.appendChild(chip);
+    });
+  }
+
+  // 渲染预设分类胶囊
   function renderCapsules() {
     capsuleGrid.innerHTML = "";
-    TECH_CATEGORIES.forEach((cat) => {
+    PRESET_CATEGORIES.forEach((cat) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `edgeever-gh-capsule-btn ${cat.id === currentLanguage ? "is-active" : ""}`;
+      btn.className = `edgeever-gh-capsule-btn ${cat.id === currentCategoryId && !currentSearchQuery ? "is-active" : ""}`;
       btn.innerHTML = `<span>${cat.name}</span>`;
       btn.onclick = () => {
-        currentLanguage = cat.id;
+        currentCategoryId = cat.id;
+        currentSearchQuery = "";
+        keywordInput.value = "";
+        searchClearBtn.style.display = "none";
+
+        if (cat.type === "search") {
+          setReportStyle("benchmark");
+        }
+
         capsuleGrid.querySelectorAll(".edgeever-gh-capsule-btn").forEach((b) => b.classList.remove("is-active"));
         btn.classList.add("is-active");
+        renderCustomTags();
         selectedLangName.textContent = cat.name.split(" ")[0];
-        loadTrendingData();
+        loadData();
       };
       capsuleGrid.appendChild(btn);
     });
-    const curObj = TECH_CATEGORIES.find((c) => c.id === currentLanguage) || TECH_CATEGORIES[0];
+
+    const curObj = PRESET_CATEGORIES.find((c) => c.id === currentCategoryId) || PRESET_CATEGORIES[0];
     selectedLangName.textContent = curObj.name.split(" ")[0];
   }
 
-  // 渲染热榜卡片列表
+  // 渲染项目卡片
   function renderCards(items) {
     if (!items || items.length === 0) {
       cardsContainer.innerHTML = `
         <div style="padding: 40px; text-align: center; color: var(--ee-gh-text-muted);">
-          未检索到符合条件的开源项目，请切换技术分类或刷新重试。
+          未检索到符合条件的开源项目，请尝试更换关键词或刷新重试。
         </div>
       `;
       cardCountBadge.textContent = "0";
@@ -775,6 +1073,10 @@ function openConsoleModal(context) {
     items.forEach((it) => {
       const card = document.createElement("div");
       card.className = "edgeever-gh-card";
+
+      // 提取前几个 topic
+      const topicsHtml = (it.topics || []).slice(0, 4).map((t) => `<span class="edgeever-gh-tag-chip" style="font-size:10px; padding:1px 6px;">#${escapeHtml(t)}</span>`).join(" ");
+
       card.innerHTML = `
         <div class="edgeever-gh-card-top">
           <div class="edgeever-gh-repo-info">
@@ -784,13 +1086,15 @@ function openConsoleModal(context) {
             </a>
           </div>
           <span class="edgeever-gh-card-stars-today">
-            ⭐ ${escapeHtml(it.periodText || it.totalStars)}
+            ${escapeHtml(it.periodText || it.totalStars)}
           </span>
         </div>
 
         <div class="edgeever-gh-card-desc">
           ${escapeHtml(it.description)}
         </div>
+
+        ${topicsHtml ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">${topicsHtml}</div>` : ""}
 
         <div class="edgeever-gh-card-bottom">
           <span class="edgeever-gh-meta-item">
@@ -809,15 +1113,21 @@ function openConsoleModal(context) {
   }
 
   // 加载数据
-  async function loadTrendingData() {
+  async function loadData() {
+    const isSearch = Boolean(currentSearchQuery.trim());
     cardsContainer.innerHTML = `
       <div style="padding: 40px; text-align: center; color: var(--ee-gh-text-muted);">
-        正在抓取 GitHub ${currentRange === "weekly" ? "本周" : "昨日"} 开源热榜...
+        正在抓取 GitHub ${isSearch ? `「${escapeHtml(currentSearchQuery)}」相关开源项目` : `${currentRange === "monthly" ? "最近一月" : currentRange === "weekly" ? "本周" : "昨日"}热榜`}...
       </div>
     `;
     btnRefreshData.disabled = true;
+
     try {
-      const items = await fetchTrendingFromGitHub(currentRange, currentLanguage);
+      const items = await fetchRepositories({
+        range: currentRange,
+        categoryId: currentCategoryId,
+        searchQuery: currentSearchQuery,
+      });
       trendingItems = items;
       renderCards(items);
     } catch (err) {
@@ -830,6 +1140,43 @@ function openConsoleModal(context) {
       btnRefreshData.disabled = false;
     }
   }
+
+  // 搜索事件
+  function handleSearchTrigger() {
+    const val = keywordInput.value.trim();
+    if (!val) return;
+    currentSearchQuery = val;
+    searchClearBtn.style.display = "flex";
+
+    // 如果还没有在自定义标签中，自动添加到前面
+    if (!userCustomKeywords.includes(val)) {
+      userCustomKeywords.unshift(val);
+      if (userCustomKeywords.length > 8) userCustomKeywords.pop();
+      context.settings?.set?.("custom_keywords", userCustomKeywords.join(", "));
+    }
+
+    setReportStyle("benchmark");
+    renderCustomTags();
+    capsuleGrid.querySelectorAll(".edgeever-gh-capsule-btn").forEach((b) => b.classList.remove("is-active"));
+    selectedLangName.textContent = `🔍 ${val}`;
+    loadData();
+  }
+
+  btnSearch.onclick = handleSearchTrigger;
+  keywordInput.onkeydown = (e) => {
+    if (e.key === "Enter") handleSearchTrigger();
+  };
+  keywordInput.oninput = () => {
+    searchClearBtn.style.display = keywordInput.value ? "flex" : "none";
+  };
+  searchClearBtn.onclick = () => {
+    keywordInput.value = "";
+    searchClearBtn.style.display = "none";
+    currentSearchQuery = "";
+    renderCustomTags();
+    renderCapsules();
+    loadData();
+  };
 
   // 切换视图模式 (卡片 vs 报告)
   function switchView(tab) {
@@ -859,13 +1206,17 @@ function openConsoleModal(context) {
     }
   }
 
-  // 事件绑定：Tab 周期切换
+  // 周期 Tab 切换
   rangeTabs.forEach((btn) => {
     btn.onclick = () => {
       currentRange = btn.dataset.range;
       rangeTabs.forEach((b) => b.classList.remove("is-active"));
       btn.classList.add("is-active");
-      loadTrendingData();
+      currentSearchQuery = "";
+      keywordInput.value = "";
+      searchClearBtn.style.display = "none";
+      renderCapsules();
+      loadData();
     };
   });
 
@@ -887,13 +1238,12 @@ function openConsoleModal(context) {
 
   tabCards.onclick = () => switchView("cards");
   tabReport.onclick = () => switchView("report");
+  btnRefreshData.onclick = () => loadData();
 
-  btnRefreshData.onclick = () => loadTrendingData();
-
-  // 核心：AI 深度生成日报
+  // AI 深度生成文章
   btnGenerateAi.onclick = async () => {
     if (trendingItems.length === 0) {
-      context.ui?.showNotice?.("当前没有热榜数据，请先抓取！");
+      context.ui?.showNotice?.("当前没有项目数据，请先抓取或搜索！");
       return;
     }
 
@@ -903,9 +1253,12 @@ function openConsoleModal(context) {
     btnGenerateAi.disabled = true;
 
     try {
+      const curCat = PRESET_CATEGORIES.find((c) => c.id === currentCategoryId);
       const options = {
         range: currentRange,
-        language: currentLanguage,
+        reportStyle: currentReportStyle,
+        categoryName: curCat ? curCat.name : "开源热搜",
+        searchTerm: currentSearchQuery || (curCat && curCat.type === "search" ? curCat.targetTerm : ""),
         provider: currentProvider,
         customSettings: {
           baseUrl: customBaseUrl.value,
@@ -921,7 +1274,7 @@ function openConsoleModal(context) {
       generatedReport = result;
       reportContainer.innerHTML = renderMarkdownBasic(result.text);
 
-      context.ui?.showNotice?.("🎉 AI 深度热搜报告生成完成！");
+      context.ui?.showNotice?.("🎉 AI 深度分析报告生成完成！");
     } catch (err) {
       console.error("[GitHub Hot] generate error:", err);
       reportContainer.innerHTML = `
@@ -943,12 +1296,10 @@ function openConsoleModal(context) {
     if (!generatedReport) return;
     btnSaveNote.disabled = true;
     try {
-      const { isUpdated } = await saveReportToNote(
-        context,
-        generatedReport.title,
-        generatedReport.text,
-        currentRange
-      );
+      const { isUpdated } = await saveReportToNote(context, generatedReport.title, generatedReport.text, {
+        range: currentRange,
+        isBenchmark: generatedReport.isBenchmark,
+      });
       context.ui?.showNotice?.(
         isUpdated
           ? `已成功更新现有笔记「${generatedReport.title}」！`
@@ -990,15 +1341,16 @@ function openConsoleModal(context) {
 
   // 初始化
   initSettingsAndNotebooks().then(() => {
+    renderCustomTags();
     renderCapsules();
-    loadTrendingData();
+    loadData();
   });
 }
 
 // ==================== 6. 定时后台自动生成任务 ====================
 async function runDailyDigestJob(context, range = "daily") {
   try {
-    const items = await fetchTrendingFromGitHub(range, "all");
+    const items = await fetchRepositories({ range, categoryId: "all" });
     if (!items || items.length === 0) return;
 
     const maxItems = (await context.settings.get("max_items")) || 10;
@@ -1013,12 +1365,13 @@ async function runDailyDigestJob(context, range = "daily") {
     const selectedItems = items.slice(0, parseInt(maxItems, 10));
     const result = await callAiEngine(context, selectedItems, {
       range,
-      language: "all",
+      reportStyle: "digest",
+      categoryName: "全语言总榜",
       provider,
       customSettings,
     });
 
-    await saveReportToNote(context, result.title, result.text, range);
+    await saveReportToNote(context, result.title, result.text, { range, isBenchmark: false });
     context.ui?.showNotice?.(`🌅 今日《${result.title}》已自动为您生成并归档！`);
   } catch (err) {
     console.warn("[GitHub Hot] Daily schedule job error:", err);
@@ -1077,7 +1430,7 @@ export default {
     // 注册命令
     context.commands.register({
       id: "github-hot-open-console",
-      title: "GitHub 开源热搜日报 (控制台)...",
+      title: "GitHub 开源热搜与竞品调研 (控制台)...",
       listed: true,
       run() {
         openConsoleModal(context);
@@ -1101,6 +1454,16 @@ export default {
       async run() {
         context.ui?.showNotice?.("正在汇总本周 GitHub 热搜趋势，请稍候...");
         await runDailyDigestJob(context, "weekly");
+      },
+    });
+
+    context.commands.register({
+      id: "github-hot-generate-monthly",
+      title: "立即生成最近一月 GitHub 开源特刊",
+      listed: true,
+      async run() {
+        context.ui?.showNotice?.("正在汇总最近一月 GitHub 开源黑马，请稍候...");
+        await runDailyDigestJob(context, "monthly");
       },
     });
 
@@ -1159,7 +1522,7 @@ export default {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.id = "edgeever-github-hot-btn";
-      btn.title = "GitHub 开源热搜日报 (昨日热榜 / 本周周刊)";
+      btn.title = "GitHub 开源热搜与竞品调研 (日报/周刊/月刊/对标)";
 
       const svgIcon = `
         <svg viewBox="0 0 24 24">

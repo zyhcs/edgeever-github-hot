@@ -2,14 +2,14 @@
   "type": "plugin",
   "id": "org.edgeever.plugins.github-hot",
   "name": "GitHub Hot Digest",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": "2",
   "settingsUi": "host",
-  "description": "Daily & Weekly GitHub Trending Digest plugin for EdgeEver. Explores the latest open-source stars, generates in-depth AI technical analysis and trend reports using EdgeEver AI or custom LLM proxies, and saves directly to your notes.",
+  "description": "Daily, Weekly & Monthly GitHub Trending Digest with custom category search & competitive benchmark reports. Powered by EdgeEver native AI or LLM proxies.",
   "locales": {
     "zh-CN": {
       "name": "开源热搜日报 (GitHub Hot)",
-      "description": "面向 EdgeEver 笔记的 GitHub 开源热搜与技术趋势日报插件。聚合全网最新开源热榜，通过 EdgeEver 客户端原生 AI 模型或自定义代理深度提炼技术亮点与生态洞察，一键生成昨日热搜日报或本周技术周刊并直接存入笔记本。"
+      "description": "面向 EdgeEver 笔记的 GitHub 开源热搜、月度特刊与自定义竞品调研插件。聚合全网热榜，支持自定义关键词检索与对标（如 EdgeEver 类知识库/笔记、AI Agent），通过 EdgeEver 原生 AI 智能生成日报、周报、月刊及深度选型对比报告。"
     }
   },
   "author": "zyhcs",
@@ -36,8 +36,9 @@
         "label": "默认榜单统计周期",
         "default": "daily",
         "options": [
-          { "value": "daily", "label": "昨日开源热搜日报 (Past 24 Hours)" },
-          { "value": "weekly", "label": "最近一周热搜周报 (Past Week Trending)" }
+          { "value": "daily", "label": "🌅 昨日开源热搜日报 (Past 24 Hours)" },
+          { "value": "weekly", "label": "🚀 最近一周热搜周报 (Past Week)" },
+          { "value": "monthly", "label": "🌕 最近一月开源特刊 (Past Month)" }
         ]
       },
       {
@@ -47,6 +48,8 @@
         "default": "all",
         "options": [
           { "value": "all", "label": "🔥 全语言总热榜 (Overall Trending)" },
+          { "value": "custom_notes", "label": "📝 笔记与知识库 (EdgeEver/Notion 对标)" },
+          { "value": "custom_agent", "label": "🤖 AI Agent 与自动化工作流" },
           { "value": "python", "label": "🐍 Python (AI / 深度学习 / 自动化)" },
           { "value": "javascript", "label": "🟨 JavaScript (Web / 前端 / 运行时)" },
           { "value": "typescript", "label": "🔷 TypeScript (现代全栈应用)" },
@@ -56,9 +59,25 @@
         ]
       },
       {
+        "key": "custom_keywords",
+        "type": "text",
+        "label": "常用自定义对标关键词 (英文逗号分隔，如：markdown note, local-first, mcp)",
+        "default": "markdown note, knowledge base, pkm, ai agent, mcp"
+      },
+      {
+        "key": "default_report_style",
+        "type": "select",
+        "label": "默认 AI 报告生成模式",
+        "default": "digest",
+        "options": [
+          { "value": "digest", "label": "📊 综合技术热点速报 (推荐常规日报/周报)" },
+          { "value": "benchmark", "label": "⚔️ 竞品横向对比与技术选型调研报告 (适用于专项对标)" }
+        ]
+      },
+      {
         "key": "max_items",
         "type": "number",
-        "label": "每次入选精选热榜项目上限 (个)",
+        "label": "每次入选精选项目上限 (个)",
         "default": 10,
         "min": 5,
         "max": 25,

@@ -781,3 +781,166 @@
 .edgeever-gh-report-paper li {
   margin-bottom: 6px;
 }
+
+/* ==================== 8. 关键词搜索与自定义分类增强 ==================== */
+.edgeever-gh-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.edgeever-gh-search-input {
+  flex: 1;
+  height: 34px;
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  border-radius: 6px;
+  padding: 0 32px 0 10px;
+  font-size: 12.5px;
+  color: var(--ee-gh-text);
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.edgeever-gh-search-input:focus {
+  border-color: var(--ee-gh-primary);
+  background: var(--ee-gh-bg);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+}
+
+.edgeever-gh-search-btn {
+  height: 34px;
+  padding: 0 12px;
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  border-radius: 6px;
+  color: var(--ee-gh-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.edgeever-gh-search-btn:hover {
+  background: var(--ee-gh-primary);
+  color: #ffffff;
+  border-color: var(--ee-gh-primary);
+}
+
+.edgeever-gh-search-clear {
+  position: absolute;
+  right: 68px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--ee-gh-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 50%;
+}
+
+.edgeever-gh-search-clear:hover {
+  background: rgba(128, 128, 128, 0.2);
+  color: var(--ee-gh-text);
+}
+
+/* 自定义分类标签云 */
+.edgeever-gh-custom-tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.edgeever-gh-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--ee-gh-text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.edgeever-gh-tag-chip:hover {
+  border-color: var(--ee-gh-primary);
+  color: var(--ee-gh-primary);
+}
+
+.edgeever-gh-tag-chip.is-active {
+  background: rgba(9, 105, 218, 0.12);
+  border-color: var(--ee-gh-primary);
+  color: var(--ee-gh-primary);
+  font-weight: 600;
+}
+
+.edgeever-gh-tag-chip-del {
+  color: var(--ee-gh-text-muted);
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.edgeever-gh-tag-chip-del:hover {
+  color: #cf222e;
+}
+
+/* 报告风格单选卡片 */
+.edgeever-gh-style-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edgeever-gh-style-option {
+  border: 1px solid var(--ee-gh-border);
+  background: var(--ee-gh-card-bg);
+  border-radius: 7px;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.edgeever-gh-style-option:hover {
+  border-color: var(--ee-gh-primary);
+}
+
+.edgeever-gh-style-option.is-active {
+  background: rgba(9, 105, 218, 0.08);
+  border-color: var(--ee-gh-primary);
+  box-shadow: 0 0 0 1px var(--ee-gh-primary);
+}
+
+.edgeever-gh-style-option input[type="radio"] {
+  margin: 0;
+  accent-color: var(--ee-gh-primary);
+}
+
+.edgeever-gh-style-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ee-gh-text);
+}
+
+.edgeever-gh-style-desc {
+  font-size: 11px;
+  color: var(--ee-gh-text-muted);
+}
+
