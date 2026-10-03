@@ -2,7 +2,7 @@
   "type": "plugin",
   "id": "org.edgeever.plugins.github-hot",
   "name": "GitHub Hot Digest",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "apiVersion": "2",
   "settingsUi": "host",
   "description": "Daily, Weekly & Monthly GitHub Trending Digest with custom category search & competitive benchmark reports. Powered by EdgeEver native AI or LLM proxies.",
@@ -144,6 +144,22 @@
           { "value": "fab", "label": "右下角悬浮按钮 (避开原生 AI 按钮)" },
           { "value": "hidden", "label": "隐藏按钮 (仅通过命令面板唤出)" }
         ]
+      },
+      {
+        "key": "bookmark_mode",
+        "type": "select",
+        "label": "项目收藏 / 稍后阅读保存模式",
+        "default": "inbox",
+        "options": [
+          { "value": "inbox", "label": "📌 集中汇总到《GitHub 开源项目收藏夹》(带复选清单，推荐)" },
+          { "value": "single", "label": "📄 为每个收藏项目创建独立笔记" }
+        ]
+      },
+      {
+        "key": "bookmark_note_title",
+        "type": "text",
+        "label": "汇总收藏夹笔记标题",
+        "default": "📌 GitHub 开源项目收藏夹 (稍后阅读)"
       }
     ]
   }

@@ -623,6 +623,178 @@ async function saveReportToNote(context, reportTitle, reportMarkdown, options = 
   return { noteId: finalNoteId, isUpdated: Boolean(existingNote) };
 }
 
+// ==================== 4.1 单项目稍后阅读 / 快速收藏 ====================
+async function bookmarkRepository(context, item, buttonEl = null) {
+  const fullName = item.fullName;
+  const now = new Date();
+  const dateStr = formatDate(now);
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const nowFormat = `${dateStr} ${timeStr}`;
+
+  // 1. 获取收藏设置项
+  let bookmarkMode = "inbox";
+  let bookmarkNoteTitle = "📌 GitHub 开源项目收藏夹 (稍后阅读)";
+  let targetNotebookId = "";
+
+  try {
+    const mode = await context.settings.get("bookmark_mode");
+    if (mode) bookmarkMode = String(mode);
+
+    const title = await context.settings.get("bookmark_note_title");
+    if (title) bookmarkNoteTitle = String(title);
+
+    const nbId = await context.settings.get("target_notebook_id");
+    if (nbId) targetNotebookId = String(nbId);
+  } catch (e) {}
+
+  if (!targetNotebookId) {
+    try {
+      const notebooks = (await context.notebooks.list()) || [];
+      const matched = notebooks.find((nb) => /(收藏|稍后阅读|热榜|开源|inbox)/i.test(nb.name));
+      if (matched) targetNotebookId = matched.id;
+      else if (notebooks.length > 0) targetNotebookId = notebooks[0].id;
+    } catch (e) {}
+  }
+
+  // 2. 模式 A：集中汇总到单个清单笔记 (带待办复选框 - [ ])
+  if (bookmarkMode === "inbox") {
+    const topicsLine =
+      item.topics && item.topics.length > 0
+        ? `- 🏷️ **核心标签**：${item.topics.map((t) => "`#" + t + "`").join(" ")}\n`
+        : "";
+
+    const cardMarkdown = [
+      `### - [ ] 📦 [${item.fullName}](${item.url})`,
+      `> 🏷️ **技术栈**：${item.language || "Other"}  ·  ⭐ **Star规模**：${item.periodText || item.totalStars}  ·  📅 **收藏时间**：${nowFormat}`,
+      ``,
+      `- 💡 **核心描述**：${item.description || "暂无项目描述"}`,
+      topicsLine ? topicsLine.trimEnd() : "",
+      `- 📝 **我的随手记 / 调研心得**：（点击此处随时补充想法与评估结论...）`,
+      ``,
+      `---`,
+      ``,
+    ]
+      .filter((line) => line !== null && line !== undefined)
+      .join("\n");
+
+    let bookmarkNote = null;
+    try {
+      const queryRes = await context.notes.query({
+        notebookId: targetNotebookId || undefined,
+        tags: ["GitHub稍后阅读"],
+        limit: 5,
+      });
+      if (queryRes && queryRes.notes && queryRes.notes.length > 0) {
+        bookmarkNote = queryRes.notes[0];
+      }
+    } catch (e) {}
+
+    if (!bookmarkNote) {
+      try {
+        const queryRes = await context.notes.query({
+          notebookId: targetNotebookId || undefined,
+          limit: 20,
+        });
+        if (queryRes && queryRes.notes) {
+          bookmarkNote = queryRes.notes.find(
+            (n) => n.title.includes("GitHub 开源项目收藏夹") || n.title === bookmarkNoteTitle
+          );
+        }
+      } catch (e) {}
+    }
+
+    if (bookmarkNote) {
+      const oldContent = bookmarkNote.contentMarkdown || "";
+      if (oldContent.includes(`github.com/${fullName}`)) {
+        context.ui?.showNotice?.(`【${fullName}】已在您的稍后阅读清单中！`);
+        if (buttonEl) {
+          buttonEl.classList.add("is-bookmarked");
+          buttonEl.innerHTML = "<span>★ 已收藏</span>";
+        }
+        return bookmarkNote.id;
+      }
+
+      // 将新条目平滑插入到第一个条目前方（保留顶部标题和引言）
+      let newContent = "";
+      const headerDividerMatch = oldContent.match(/^(# [^\n]+\n(?:>[^\n]+\n|\n)*---\n\n?)/);
+      if (headerDividerMatch) {
+        const headerPart = headerDividerMatch[1];
+        const bodyPart = oldContent.slice(headerPart.length);
+        newContent = headerPart + cardMarkdown + bodyPart;
+      } else {
+        newContent = oldContent + "\n\n" + cardMarkdown;
+      }
+
+      await context.notes.update(bookmarkNote.id, {
+        contentMarkdown: newContent,
+        tags: Array.from(new Set([...(bookmarkNote.tags || []), "GitHub收藏", "GitHub稍后阅读", "开源灵感"])),
+      });
+      context.ui?.showNotice?.(`已将【${fullName}】加入稍后阅读清单！`);
+    } else {
+      // 首次创建聚合笔记
+      const initialContent = [
+        `# ${bookmarkNoteTitle}`,
+        `> 💡 这里汇集了您在浏览 GitHub 开源热榜时标记稍后阅读的项目清单。阅读或测试完毕后，可勾选复选框 \`- [x]\` 完成归档。`,
+        `> 🏷️ **分类标签**：#GitHub收藏 #稍后阅读 #开源灵感`,
+        ``,
+        `---`,
+        ``,
+        cardMarkdown,
+      ].join("\n");
+
+      const created = await context.notes.create({
+        notebookId: targetNotebookId || undefined,
+        title: bookmarkNoteTitle,
+        contentMarkdown: initialContent,
+        tags: ["GitHub收藏", "GitHub稍后阅读", "开源灵感"],
+      });
+      bookmarkNote = created;
+      context.ui?.showNotice?.(`已创建《${bookmarkNoteTitle}》并将【${fullName}】加入清单！`);
+    }
+
+    if (buttonEl) {
+      buttonEl.classList.add("is-bookmarked");
+      buttonEl.innerHTML = "<span>★ 已收藏</span>";
+    }
+
+    return bookmarkNote?.id;
+  }
+
+  // 模式 B：单篇独立笔记模式
+  const singleTitle = `[开源收藏] ${fullName} · 稍后阅读`;
+  const singleContent = [
+    `# 📦 [${item.fullName}](${item.url})`,
+    `> 🏷️ **技术栈**：${item.language || "Other"}  ·  ⭐ **Star规模**：${item.totalStars || item.periodStars}  ·  📅 **收藏时间**：${nowFormat}`,
+    `> 🔗 **代码仓库**：[${item.url}](${item.url})`,
+    ``,
+    `## 💡 项目简介`,
+    item.description || "暂无项目描述",
+    ``,
+    item.topics && item.topics.length ? `## 🏷️ 领域标签\n${item.topics.map((t) => "`#" + t + "`").join(" ")}\n` : "",
+    `## 📝 深度阅读与测试笔记`,
+    `- [ ] 体验与本地部署尝试`,
+    `- [ ] 架构设计与核心模块阅读`,
+    `- [ ] 技术选型对比与借鉴点总结`,
+    ``,
+    `---`,
+  ].join("\n");
+
+  const created = await context.notes.create({
+    notebookId: targetNotebookId || undefined,
+    title: singleTitle,
+    contentMarkdown: singleContent,
+    tags: ["GitHub收藏", "GitHub稍后阅读", "开源项目"],
+  });
+
+  if (buttonEl) {
+    buttonEl.classList.add("is-bookmarked");
+    buttonEl.innerHTML = "<span>★ 已收藏</span>";
+  }
+
+  context.ui?.showNotice?.(`已为【${fullName}】创建独立稍后阅读笔记！`);
+  return created?.id;
+}
+
 // 简易 Markdown 转排版 HTML 预览 (支持表格)
 function renderMarkdownBasic(md) {
   if (!md) return "";
@@ -692,6 +864,7 @@ function openConsoleModal(context) {
   let activeTab = "cards"; // "cards" | "report"
   let isGenerating = false;
   let userCustomKeywords = ["markdown note", "knowledge base", "pkm", "ai agent", "mcp"];
+  let bookmarkedReposSet = new Set();
 
   const backdrop = document.createElement("div");
   backdrop.className = "edgeever-gh-modal-backdrop";
@@ -709,9 +882,9 @@ function openConsoleModal(context) {
           <div class="edgeever-gh-title-group">
             <h2>
               开源热搜与竞品调研
-              <span class="edgeever-gh-version-badge">v1.1.0</span>
+              <span class="edgeever-gh-version-badge">v1.2.0</span>
             </h2>
-            <div class="edgeever-gh-subtitle">GitHub 开源热榜 (日/周/月) & 竞品对标调研，AI 深度横向对比</div>
+            <div class="edgeever-gh-subtitle">GitHub 开源热榜 (日/周/月) & 竞品对标调研，一键稍后阅读</div>
           </div>
         </div>
 
@@ -859,6 +1032,9 @@ function openConsoleModal(context) {
             </div>
 
             <div class="edgeever-gh-pane-actions">
+              <button type="button" class="edgeever-gh-pill-action" id="ee-btn-open-bookmarks" title="查看集中收藏夹笔记">
+                📌 稍后阅读清单
+              </button>
               <button type="button" class="edgeever-gh-pill-action" id="ee-btn-copy-md" style="display: none;">
                 📋 复制 Markdown
               </button>
@@ -962,6 +1138,13 @@ function openConsoleModal(context) {
           .map((s) => s.trim())
           .filter(Boolean);
       }
+
+      try {
+        const savedBm = await context.storage?.get?.("bookmarked_repos");
+        if (Array.isArray(savedBm)) {
+          bookmarkedReposSet = new Set(savedBm);
+        }
+      } catch (e) {}
     } catch (e) {}
 
     // 笔记本下拉
@@ -1073,6 +1256,7 @@ function openConsoleModal(context) {
     items.forEach((it) => {
       const card = document.createElement("div");
       card.className = "edgeever-gh-card";
+      const isBookmarked = bookmarkedReposSet.has(it.fullName);
 
       // 提取前几个 topic
       const topicsHtml = (it.topics || []).slice(0, 4).map((t) => `<span class="edgeever-gh-tag-chip" style="font-size:10px; padding:1px 6px;">#${escapeHtml(t)}</span>`).join(" ");
@@ -1085,9 +1269,14 @@ function openConsoleModal(context) {
               <span>${escapeHtml(it.fullName)}</span>
             </a>
           </div>
-          <span class="edgeever-gh-card-stars-today">
-            ${escapeHtml(it.periodText || it.totalStars)}
-          </span>
+          <div class="edgeever-gh-card-top-actions">
+            <span class="edgeever-gh-card-stars-today">
+              ${escapeHtml(it.periodText || it.totalStars)}
+            </span>
+            <button type="button" class="edgeever-gh-btn-bookmark ${isBookmarked ? "is-bookmarked" : ""}" data-repo="${escapeHtml(it.fullName)}" title="快速加入稍后阅读清单">
+              <span>${isBookmarked ? "★ 已收藏" : "🔖 稍后阅读"}</span>
+            </button>
+          </div>
         </div>
 
         <div class="edgeever-gh-card-desc">
@@ -1108,6 +1297,24 @@ function openConsoleModal(context) {
           </a>
         </div>
       `;
+
+      // 绑定稍后阅读收藏点击事件
+      const bmBtn = card.querySelector(".edgeever-gh-btn-bookmark");
+      if (bmBtn) {
+        bmBtn.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          bmBtn.disabled = true;
+          try {
+            await bookmarkRepository(context, it, bmBtn);
+            bookmarkedReposSet.add(it.fullName);
+            context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
+          } finally {
+            bmBtn.disabled = false;
+          }
+        };
+      }
+
       cardsContainer.appendChild(card);
     });
   }
@@ -1325,6 +1532,46 @@ function openConsoleModal(context) {
     }
   };
 
+  // 查看稍后阅读清单笔记
+  const btnOpenBookmarks = backdrop.querySelector("#ee-btn-open-bookmarks");
+  if (btnOpenBookmarks) {
+    btnOpenBookmarks.onclick = async () => {
+      let bookmarkNoteTitle = "📌 GitHub 开源项目收藏夹 (稍后阅读)";
+      try {
+        const title = await context.settings.get("bookmark_note_title");
+        if (title) bookmarkNoteTitle = String(title);
+      } catch (e) {}
+
+      let targetNote = null;
+      try {
+        const queryRes = await context.notes.query({ tags: ["GitHub稍后阅读"], limit: 5 });
+        if (queryRes && queryRes.notes && queryRes.notes.length > 0) {
+          targetNote = queryRes.notes[0];
+        }
+      } catch (e) {}
+
+      if (!targetNote) {
+        try {
+          const queryRes = await context.notes.query({ limit: 20 });
+          if (queryRes && queryRes.notes) {
+            targetNote = queryRes.notes.find(
+              (n) => n.title.includes("GitHub 开源项目收藏夹") || n.title === bookmarkNoteTitle
+            );
+          }
+        } catch (e) {}
+      }
+
+      if (targetNote) {
+        context.ui?.showNotice?.(`已为您找到稍后阅读清单《${targetNote.title}》！`);
+        try {
+          await context.editor?.openDocument?.({ noteId: targetNote.id });
+        } catch (e) {}
+      } else {
+        context.ui?.showNotice?.("您尚未收藏任何项目。浏览时点击卡片右上角「🔖 稍后阅读」即可一键加入！");
+      }
+    };
+  }
+
   const closeModal = () => backdrop.remove();
   btnClose.onclick = closeModal;
   backdrop.onclick = (e) => {
@@ -1464,6 +1711,30 @@ export default {
       async run() {
         context.ui?.showNotice?.("正在汇总最近一月 GitHub 开源黑马，请稍候...");
         await runDailyDigestJob(context, "monthly");
+      },
+    });
+
+    context.commands.register({
+      id: "github-hot-open-bookmarks",
+      title: "打开 GitHub 稍后阅读收藏夹清单",
+      listed: true,
+      async run() {
+        let targetNote = null;
+        try {
+          const queryRes = await context.notes.query({ tags: ["GitHub稍后阅读"], limit: 5 });
+          if (queryRes && queryRes.notes && queryRes.notes.length > 0) {
+            targetNote = queryRes.notes[0];
+          }
+        } catch (e) {}
+
+        if (targetNote) {
+          context.ui?.showNotice?.(`已为您找到稍后阅读清单《${targetNote.title}》！`);
+          try {
+            await context.editor?.openDocument?.({ noteId: targetNote.id });
+          } catch (e) {}
+        } else {
+          context.ui?.showNotice?.("尚未创建稍后阅读收藏夹。请在控制台浏览热榜时点击「🔖 稍后阅读」！");
+        }
       },
     });
 

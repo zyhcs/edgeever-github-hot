@@ -566,6 +566,50 @@
   gap: 12px;
 }
 
+.edgeever-gh-card-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edgeever-gh-btn-bookmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  color: var(--ee-gh-text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.edgeever-gh-btn-bookmark:hover {
+  background: var(--ee-gh-bg);
+  color: #d97706;
+  border-color: #f59e0b;
+  transform: translateY(-1px);
+}
+
+.edgeever-gh-btn-bookmark.is-bookmarked {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+  border-color: #f59e0b;
+}
+
+@media (prefers-color-scheme: dark) {
+  .edgeever-gh-btn-bookmark.is-bookmarked {
+    background: rgba(240, 136, 62, 0.15);
+    color: #f0883e;
+    border-color: #f0883e;
+  }
+}
+
+
 .edgeever-gh-repo-info {
   display: flex;
   align-items: center;
