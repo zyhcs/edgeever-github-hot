@@ -664,7 +664,7 @@ async function bookmarkRepository(context, item, buttonEl = null) {
         : "";
 
     const cardMarkdown = [
-      `### - [ ] 📦 [${item.fullName}](${item.url})`,
+      `- [ ] 📦 [${item.fullName}](${item.url})`,
       `> 🏷️ **技术栈**：${item.language || "Other"}  ·  ⭐ **Star规模**：${item.periodText || item.totalStars}  ·  📅 **收藏时间**：${nowFormat}`,
       ``,
       `- 💡 **核心描述**：${item.description || "暂无项目描述"}`,
@@ -672,7 +672,6 @@ async function bookmarkRepository(context, item, buttonEl = null) {
       `- 📝 **我的随手记 / 调研心得**：（点击此处随时补充想法与评估结论...）`,
       ``,
       `---`,
-      ``,
     ]
       .filter((line) => line !== null && line !== undefined)
       .join("\n");
@@ -682,7 +681,7 @@ async function bookmarkRepository(context, item, buttonEl = null) {
       const queryRes = await context.notes.query({
         notebookId: targetNotebookId || undefined,
         tags: ["GitHub稍后阅读"],
-        limit: 5,
+        limit: 10,
       });
       if (queryRes && queryRes.notes && queryRes.notes.length > 0) {
         bookmarkNote = queryRes.notes[0];
@@ -693,7 +692,7 @@ async function bookmarkRepository(context, item, buttonEl = null) {
       try {
         const queryRes = await context.notes.query({
           notebookId: targetNotebookId || undefined,
-          limit: 20,
+          limit: 30,
         });
         if (queryRes && queryRes.notes) {
           bookmarkNote = queryRes.notes.find(
@@ -704,9 +703,24 @@ async function bookmarkRepository(context, item, buttonEl = null) {
     }
 
     if (bookmarkNote) {
-      const oldContent = bookmarkNote.contentMarkdown || "";
-      if (oldContent.includes(`github.com/${fullName}`)) {
+      // 关键修复：必须调用 context.notes.get 获取完整的 contentMarkdown，绝不能用 query 返回的残缺对象
+      let fullNote = null;
+      try {
+        fullNote = await context.notes.get(bookmarkNote.id);
+      } catch (e) {
+        console.warn("[GitHub Hot] context.notes.get error:", e);
+      }
+
+      const oldContent =
+        fullNote && typeof fullNote.contentMarkdown === "string"
+          ? fullNote.contentMarkdown
+          : bookmarkNote.contentMarkdown || "";
+
+      // 检查是否已经在收藏夹中（避免重复添加）
+      if (oldContent.includes(`/${fullName}`) || oldContent.includes(`github.com/${fullName}`)) {
         context.ui?.showNotice?.(`【${fullName}】已在您的稍后阅读清单中！`);
+        bookmarkedReposSet.add(fullName);
+        context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
         if (buttonEl) {
           buttonEl.classList.add("is-bookmarked");
           buttonEl.innerHTML = "<span>★ 已收藏</span>";
@@ -714,33 +728,25 @@ async function bookmarkRepository(context, item, buttonEl = null) {
         return bookmarkNote.id;
       }
 
-      // 将新条目平滑插入到第一个条目前方（保留顶部标题和引言）
+      // 将最新收藏平滑置顶在最上方，同时 100% 完整保留旧笔记的所有历史项目
       let newContent = "";
-      const headerDividerMatch = oldContent.match(/^(# [^\n]+\n(?:>[^\n]+\n|\n)*---\n\n?)/);
-      if (headerDividerMatch) {
-        const headerPart = headerDividerMatch[1];
-        const bodyPart = oldContent.slice(headerPart.length);
-        newContent = headerPart + cardMarkdown + bodyPart;
+      const trimmedOld = oldContent.trim();
+      if (!trimmedOld) {
+        newContent = cardMarkdown;
       } else {
-        newContent = oldContent + "\n\n" + cardMarkdown;
+        newContent = cardMarkdown + "\n\n" + trimmedOld;
       }
 
       await context.notes.update(bookmarkNote.id, {
         contentMarkdown: newContent,
         tags: Array.from(new Set([...(bookmarkNote.tags || []), "GitHub收藏", "GitHub稍后阅读", "开源灵感"])),
       });
+      bookmarkedReposSet.add(fullName);
+      context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
       context.ui?.showNotice?.(`已将【${fullName}】加入稍后阅读清单！`);
     } else {
       // 首次创建聚合笔记
-      const initialContent = [
-        `# ${bookmarkNoteTitle}`,
-        `> 💡 这里汇集了您在浏览 GitHub 开源热榜时标记稍后阅读的项目清单。阅读或测试完毕后，可勾选复选框 \`- [x]\` 完成归档。`,
-        `> 🏷️ **分类标签**：#GitHub收藏 #稍后阅读 #开源灵感`,
-        ``,
-        `---`,
-        ``,
-        cardMarkdown,
-      ].join("\n");
+      const initialContent = cardMarkdown;
 
       const created = await context.notes.create({
         notebookId: targetNotebookId || undefined,
@@ -748,6 +754,8 @@ async function bookmarkRepository(context, item, buttonEl = null) {
         contentMarkdown: initialContent,
         tags: ["GitHub收藏", "GitHub稍后阅读", "开源灵感"],
       });
+      bookmarkedReposSet.add(fullName);
+      context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
       bookmarkNote = created;
       context.ui?.showNotice?.(`已创建《${bookmarkNoteTitle}》并将【${fullName}】加入清单！`);
     }
@@ -882,7 +890,7 @@ function openConsoleModal(context) {
           <div class="edgeever-gh-title-group">
             <h2>
               开源热搜与竞品调研
-              <span class="edgeever-gh-version-badge">v1.2.0</span>
+              <span class="edgeever-gh-version-badge">v1.2.1</span>
             </h2>
             <div class="edgeever-gh-subtitle">GitHub 开源热榜 (日/周/月) & 竞品对标调研，一键稍后阅读</div>
           </div>
@@ -1143,6 +1151,17 @@ function openConsoleModal(context) {
         const savedBm = await context.storage?.get?.("bookmarked_repos");
         if (Array.isArray(savedBm)) {
           bookmarkedReposSet = new Set(savedBm);
+        }
+        // 尝试从现有稍后阅读笔记中全量读取并补充已收藏项目
+        const qRes = await context.notes.query({ tags: ["GitHub稍后阅读"], limit: 5 });
+        if (qRes && qRes.notes && qRes.notes.length > 0) {
+          const fn = await context.notes.get(qRes.notes[0].id);
+          if (fn && typeof fn.contentMarkdown === "string") {
+            const matches = fn.contentMarkdown.matchAll(/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)/g);
+            for (const m of matches) {
+              bookmarkedReposSet.add(m[1]);
+            }
+          }
         }
       } catch (e) {}
     } catch (e) {}
