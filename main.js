@@ -664,8 +664,8 @@ async function bookmarkRepository(context, item, buttonEl = null) {
         : "";
 
     const cardMarkdown = [
-      `- [ ] 📦 [${item.fullName}](${item.url})`,
-      `> 🏷️ **技术栈**：${item.language || "Other"}  ·  ⭐ **Star规模**：${item.periodText || item.totalStars}  ·  📅 **收藏时间**：${nowFormat}`,
+      `### 📦 [${item.fullName}](${item.url})`,
+      `- [ ] **阅读评估**：待研读  ·  🏷️ **技术栈**：${item.language || "Other"}  ·  ⭐ **Star规模**：${item.periodText || item.totalStars}  ·  📅 **收藏时间**：${nowFormat}`,
       ``,
       `- 💡 **核心描述**：${item.description || "暂无项目描述"}`,
       topicsLine ? topicsLine.trimEnd() : "",
@@ -673,7 +673,7 @@ async function bookmarkRepository(context, item, buttonEl = null) {
       ``,
       `---`,
     ]
-      .filter((line) => line !== null && line !== undefined)
+      .filter((line) => line !== null && line !== undefined && line !== "")
       .join("\n");
 
     let bookmarkNote = null;
@@ -716,21 +716,49 @@ async function bookmarkRepository(context, item, buttonEl = null) {
           ? fullNote.contentMarkdown
           : bookmarkNote.contentMarkdown || "";
 
-      // 检查是否已经在收藏夹中（避免重复添加）
-      if (oldContent.includes(`/${fullName}`) || oldContent.includes(`github.com/${fullName}`)) {
-        context.ui?.showNotice?.(`【${fullName}】已在您的稍后阅读清单中！`);
-        bookmarkedReposSet.add(fullName);
-        context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
-        if (buttonEl) {
-          buttonEl.classList.add("is-bookmarked");
-          buttonEl.innerHTML = "<span>★ 已收藏</span>";
+      // 检查是否已经在收藏夹中：若已在，则本次点击为【取消收藏】
+      const isAlreadyBookmarked =
+        oldContent.includes(`/${fullName}`) ||
+        oldContent.includes(`github.com/${fullName}`) ||
+        oldContent.includes(`[${fullName}]`);
+
+      if (isAlreadyBookmarked) {
+        // 执行取消收藏：按分割线拆分卡片块并移除当前项目
+        const chunks = oldContent.split(/\n+---\n*/).map((c) => c.trim()).filter(Boolean);
+        const remainingChunks = chunks.filter(
+          (c) =>
+            !c.includes(`[${fullName}]`) &&
+            !c.includes(`github.com/${fullName}`) &&
+            !c.includes(`/${fullName}`)
+        );
+
+        let newContent = "";
+        if (remainingChunks.length === 0) {
+          newContent = "> 💡 您的稍后阅读清单目前为空。在控制台浏览热榜项目时点击「🔖 稍后阅读」即可快速加入！";
+        } else {
+          newContent = remainingChunks.map((c) => c + "\n\n---").join("\n\n");
         }
-        return bookmarkNote.id;
+
+        await context.notes.update(bookmarkNote.id, {
+          contentMarkdown: newContent,
+        });
+
+        bookmarkedReposSet.delete(fullName);
+        await context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
+
+        if (buttonEl) {
+          buttonEl.classList.remove("is-bookmarked");
+          buttonEl.innerHTML = "<span>🔖 稍后阅读</span>";
+        }
+        context.ui?.showNotice?.(`已将【${fullName}】从稍后阅读清单中移除！`);
+        return null;
       }
 
-      // 将最新收藏平滑置顶在最上方，同时 100% 完整保留旧笔记的所有历史项目
+      // 执行加入收藏：将最新收藏平滑置顶在最上方，同时 100% 完整保留旧笔记的所有历史项目
       let newContent = "";
-      const trimmedOld = oldContent.trim();
+      const trimmedOld = oldContent
+        .replace(/^> 💡 您的稍后阅读清单目前为空[^\n]*\n*/, "")
+        .trim();
       if (!trimmedOld) {
         newContent = cardMarkdown;
       } else {
@@ -742,7 +770,12 @@ async function bookmarkRepository(context, item, buttonEl = null) {
         tags: Array.from(new Set([...(bookmarkNote.tags || []), "GitHub收藏", "GitHub稍后阅读", "开源灵感"])),
       });
       bookmarkedReposSet.add(fullName);
-      context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
+      await context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
+
+      if (buttonEl) {
+        buttonEl.classList.add("is-bookmarked");
+        buttonEl.innerHTML = "<span>★ 已收藏</span>";
+      }
       context.ui?.showNotice?.(`已将【${fullName}】加入稍后阅读清单！`);
     } else {
       // 首次创建聚合笔记
@@ -755,7 +788,7 @@ async function bookmarkRepository(context, item, buttonEl = null) {
         tags: ["GitHub收藏", "GitHub稍后阅读", "开源灵感"],
       });
       bookmarkedReposSet.add(fullName);
-      context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
+      await context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
       bookmarkNote = created;
       context.ui?.showNotice?.(`已创建《${bookmarkNoteTitle}》并将【${fullName}】加入清单！`);
     }
@@ -770,6 +803,36 @@ async function bookmarkRepository(context, item, buttonEl = null) {
 
   // 模式 B：单篇独立笔记模式
   const singleTitle = `[开源收藏] ${fullName} · 稍后阅读`;
+
+  let existingSingle = null;
+  try {
+    const qRes = await context.notes.query({
+      notebookId: targetNotebookId || undefined,
+      limit: 30,
+    });
+    if (qRes && qRes.notes) {
+      existingSingle = qRes.notes.find((n) => n.title.includes(fullName) || n.title === singleTitle);
+    }
+  } catch (e) {}
+
+  if (existingSingle) {
+    try {
+      if (context.notes.trash) {
+        await context.notes.trash(existingSingle.id);
+      } else if (context.notes.delete) {
+        await context.notes.delete(existingSingle.id);
+      }
+    } catch (e) {}
+    bookmarkedReposSet.delete(fullName);
+    await context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
+    if (buttonEl) {
+      buttonEl.classList.remove("is-bookmarked");
+      buttonEl.innerHTML = "<span>🔖 稍后阅读</span>";
+    }
+    context.ui?.showNotice?.(`已取消收藏：【${fullName}】`);
+    return null;
+  }
+
   const singleContent = [
     `# 📦 [${item.fullName}](${item.url})`,
     `> 🏷️ **技术栈**：${item.language || "Other"}  ·  ⭐ **Star规模**：${item.totalStars || item.periodStars}  ·  📅 **收藏时间**：${nowFormat}`,
@@ -793,6 +856,9 @@ async function bookmarkRepository(context, item, buttonEl = null) {
     contentMarkdown: singleContent,
     tags: ["GitHub收藏", "GitHub稍后阅读", "开源项目"],
   });
+
+  bookmarkedReposSet.add(fullName);
+  await context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
 
   if (buttonEl) {
     buttonEl.classList.add("is-bookmarked");
@@ -890,7 +956,7 @@ function openConsoleModal(context) {
           <div class="edgeever-gh-title-group">
             <h2>
               开源热搜与竞品调研
-              <span class="edgeever-gh-version-badge">v1.2.1</span>
+              <span class="edgeever-gh-version-badge">v1.2.2</span>
             </h2>
             <div class="edgeever-gh-subtitle">GitHub 开源热榜 (日/周/月) & 竞品对标调研，一键稍后阅读</div>
           </div>
@@ -1326,8 +1392,6 @@ function openConsoleModal(context) {
           bmBtn.disabled = true;
           try {
             await bookmarkRepository(context, it, bmBtn);
-            bookmarkedReposSet.add(it.fullName);
-            context.storage?.set?.("bookmarked_repos", Array.from(bookmarkedReposSet)).catch(() => {});
           } finally {
             bmBtn.disabled = false;
           }
@@ -1754,6 +1818,44 @@ export default {
         } else {
           context.ui?.showNotice?.("尚未创建稍后阅读收藏夹。请在控制台浏览热榜时点击「🔖 稍后阅读」！");
         }
+      },
+    });
+
+    context.commands.register({
+      id: "github-hot-format-bookmarks",
+      title: "一键升级稍后阅读大纲索引 (规范为卡片目录)",
+      listed: true,
+      async run() {
+        let targetNote = null;
+        try {
+          const queryRes = await context.notes.query({ tags: ["GitHub稍后阅读"], limit: 5 });
+          if (queryRes && queryRes.notes && queryRes.notes.length > 0) {
+            targetNote = await context.notes.get(queryRes.notes[0].id);
+          }
+        } catch (e) {}
+
+        if (!targetNote || typeof targetNote.contentMarkdown !== "string") {
+          context.ui?.showNotice?.("未找到稍后阅读笔记或笔记正文为空。");
+          return;
+        }
+
+        // 把旧格式 "- [ ] 📦 [name](url)" 或 "### - [ ] 📦 [name](url)" 规整为 "### 📦 [name](url)"
+        let md = targetNote.contentMarkdown;
+        const updatedMd = md.replace(
+          /^(?:###\s+)?- \[[ xX]\]\s*📦\s*(\[[^\n]+\]\([^\n]+\))/gm,
+          "### 📦 $1\n- [ ] **阅读评估**：待研读"
+        );
+
+        if (updatedMd !== md) {
+          await context.notes.update(targetNote.id, { contentMarkdown: updatedMd });
+          context.ui?.showNotice?.("稍后阅读笔记大纲已重构完成！右侧已显示清晰索引。");
+        } else {
+          context.ui?.showNotice?.("稍后阅读笔记已具备规范的大纲索引！");
+        }
+
+        try {
+          await context.editor?.openDocument?.({ noteId: targetNote.id });
+        } catch (e) {}
       },
     });
 
