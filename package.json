@@ -1,0 +1,22 @@
+{
+  "name": "edgeever-github-hot",
+  "version": "1.0.0",
+  "description": "Daily & Weekly GitHub Trending Digest plugin for EdgeEver with native AI & custom proxy support.",
+  "main": "main.js",
+  "scripts": {
+    "test": "node -c main.js"
+  },
+  "keywords": [
+    "edgeever",
+    "edgeever-plugin",
+    "github-trending",
+    "ai-digest",
+    "markdown"
+  ],
+  "author": "zyhcs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zyhcs/edgeever-github-hot.git"
+  }
+}

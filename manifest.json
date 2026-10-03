@@ -1,0 +1,131 @@
+{
+  "type": "plugin",
+  "id": "org.edgeever.plugins.github-hot",
+  "name": "GitHub Hot Digest",
+  "version": "1.0.0",
+  "apiVersion": "2",
+  "settingsUi": "host",
+  "description": "Daily & Weekly GitHub Trending Digest plugin for EdgeEver. Explores the latest open-source stars, generates in-depth AI technical analysis and trend reports using EdgeEver AI or custom LLM proxies, and saves directly to your notes.",
+  "locales": {
+    "zh-CN": {
+      "name": "开源热搜日报 (GitHub Hot)",
+      "description": "面向 EdgeEver 笔记的 GitHub 开源热搜与技术趋势日报插件。聚合全网最新开源热榜，通过 EdgeEver 客户端原生 AI 模型或自定义代理深度提炼技术亮点与生态洞察，一键生成昨日热搜日报或本周技术周刊并直接存入笔记本。"
+    }
+  },
+  "author": "zyhcs",
+  "entry": "./main.js",
+  "platforms": ["web", "desktop"],
+  "permissions": [
+    "ai:generate",
+    "network",
+    "network:public",
+    "storage",
+    "notes:read",
+    "notes:write",
+    "schedules",
+    "metadata:read",
+    "ui:commands",
+    "ui:notices",
+    "editor:read"
+  ],
+  "settings": {
+    "fields": [
+      {
+        "key": "default_range",
+        "type": "select",
+        "label": "默认榜单统计周期",
+        "default": "daily",
+        "options": [
+          { "value": "daily", "label": "昨日开源热搜日报 (Past 24 Hours)" },
+          { "value": "weekly", "label": "最近一周热搜周报 (Past Week Trending)" }
+        ]
+      },
+      {
+        "key": "default_language",
+        "type": "select",
+        "label": "默认技术分类 / 编程语言",
+        "default": "all",
+        "options": [
+          { "value": "all", "label": "🔥 全语言总热榜 (Overall Trending)" },
+          { "value": "python", "label": "🐍 Python (AI / 深度学习 / 自动化)" },
+          { "value": "javascript", "label": "🟨 JavaScript (Web / 前端 / 运行时)" },
+          { "value": "typescript", "label": "🔷 TypeScript (现代全栈应用)" },
+          { "value": "rust", "label": "🦀 Rust (高性能 / 系统工具 / 基础设施)" },
+          { "value": "go", "label": "🐹 Go (云原生 / 后端架构 / 微服务)" },
+          { "value": "cpp", "label": "⚡ C/C++ (底层引擎 / 高性能计算)" }
+        ]
+      },
+      {
+        "key": "max_items",
+        "type": "number",
+        "label": "每次入选精选热榜项目上限 (个)",
+        "default": 10,
+        "min": 5,
+        "max": 25,
+        "step": 1
+      },
+      {
+        "key": "ai_provider",
+        "type": "select",
+        "label": "AI 总结与解读引擎",
+        "default": "edgeever",
+        "options": [
+          { "value": "edgeever", "label": "✨ EdgeEver 客户端原生 AI 模型 (推荐，开箱即用)" },
+          { "value": "custom", "label": "🌐 自定义 OpenAI 兼容代理 / 外部 API" }
+        ]
+      },
+      {
+        "key": "custom_ai_base_url",
+        "type": "text",
+        "label": "自定义 AI 端点 (仅自定义模式使用，如 https://api.openai.com/v1)",
+        "default": "https://api.openai.com/v1"
+      },
+      {
+        "key": "custom_ai_api_key",
+        "type": "text",
+        "label": "自定义 AI API Key (仅自定义模式使用)",
+        "default": ""
+      },
+      {
+        "key": "custom_ai_model",
+        "type": "text",
+        "label": "自定义 AI 模型名称 (如 gpt-4o-mini / deepseek-chat)",
+        "default": "gpt-4o-mini"
+      },
+      {
+        "key": "auto_digest_enabled",
+        "type": "boolean",
+        "label": "每日定时自动生成热搜日报 (类似官方 RSS 日报)",
+        "default": false
+      },
+      {
+        "key": "auto_digest_time",
+        "type": "select",
+        "label": "日报自动生成时间",
+        "default": "08:30",
+        "options": [
+          { "value": "07:00", "label": "07:00" },
+          { "value": "07:30", "label": "07:30" },
+          { "value": "08:00", "label": "08:00" },
+          { "value": "08:30", "label": "08:30 (推荐)" },
+          { "value": "09:00", "label": "09:00" },
+          { "value": "09:30", "label": "09:30" },
+          { "value": "10:00", "label": "10:00" },
+          { "value": "18:00", "label": "18:00" },
+          { "value": "21:00", "label": "21:00" }
+        ]
+      },
+      {
+        "key": "button_position",
+        "type": "select",
+        "label": "热榜日报入口按钮位置",
+        "default": "toolbar",
+        "options": [
+          { "value": "toolbar", "label": "嵌入编辑器工具栏末尾 (原生图标，推荐)" },
+          { "value": "fab", "label": "右下角悬浮按钮 (避开原生 AI 按钮)" },
+          { "value": "hidden", "label": "隐藏按钮 (仅通过命令面板唤出)" }
+        ]
+      }
+    ]
+  }
+}

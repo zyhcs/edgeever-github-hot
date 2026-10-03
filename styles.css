@@ -1,0 +1,783 @@
+/**
+ * EdgeEver GitHub Hot Digest Plugin Styles
+ * 开源热搜日报 / GitHub Trending 视觉样式规范
+ */
+
+:root {
+  --ee-gh-primary: #0969da;
+  --ee-gh-primary-hover: #0856b3;
+  --ee-gh-accent: #2ea44f;
+  --ee-gh-purple: #8250df;
+  --ee-gh-orange: #d97706;
+  --ee-gh-bg: #ffffff;
+  --ee-gh-card-bg: #f6f8fa;
+  --ee-gh-card-hover: #ffffff;
+  --ee-gh-border: #d0d7de;
+  --ee-gh-text: #1f2328;
+  --ee-gh-text-muted: #656d76;
+  --ee-gh-shadow-sm: 0 1px 3px rgba(31, 35, 40, 0.08);
+  --ee-gh-shadow-md: 0 8px 24px rgba(31, 35, 40, 0.12);
+  --ee-gh-shadow-lg: 0 16px 40px rgba(31, 35, 40, 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ee-gh-primary: #2f81f7;
+    --ee-gh-primary-hover: #58a6ff;
+    --ee-gh-accent: #238636;
+    --ee-gh-purple: #a371f7;
+    --ee-gh-orange: #f0883e;
+    --ee-gh-bg: #0d1117;
+    --ee-gh-card-bg: #161b22;
+    --ee-gh-card-hover: #1c2128;
+    --ee-gh-border: #30363d;
+    --ee-gh-text: #e6edf3;
+    --ee-gh-text-muted: #848d97;
+    --ee-gh-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --ee-gh-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --ee-gh-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.65);
+  }
+}
+
+/* ==================== 1. 入口触发按钮 ==================== */
+.edgeever-gh-hot-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+/* 工具栏原生按钮形态 */
+.edgeever-gh-hot-btn.is-toolbar-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  margin: 0 3px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--ee-gh-text);
+  opacity: 0.82;
+}
+
+.edgeever-gh-hot-btn.is-toolbar-btn:hover {
+  background-color: rgba(128, 128, 128, 0.14);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.edgeever-gh-hot-btn.is-toolbar-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+/* 悬浮按钮形态 (FAB) */
+.edgeever-gh-hot-btn.is-fab {
+  position: fixed;
+  right: 28px;
+  bottom: 84px; /* 避开原生右下角 AI 唤出按钮 */
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #1f2328 0%, #0d1117 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  z-index: 9980;
+}
+
+.edgeever-gh-hot-btn.is-fab:hover {
+  background: linear-gradient(135deg, #2d333b 0%, #161b22 100%);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.edgeever-gh-hot-btn.is-fab svg {
+  width: 22px;
+  height: 22px;
+  fill: #ffffff;
+}
+
+/* ==================== 2. 模态弹窗遮罩与主容器 ==================== */
+.edgeever-gh-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 24px;
+  animation: eeGhFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@keyframes eeGhFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.edgeever-gh-modal {
+  width: 100%;
+  max-width: 1140px;
+  height: 88vh;
+  max-height: 860px;
+  background: var(--ee-gh-bg);
+  color: var(--ee-gh-text);
+  border-radius: 16px;
+  border: 1px solid var(--ee-gh-border);
+  box-shadow: var(--ee-gh-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: eeGhSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes eeGhSlideUp {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ==================== 3. 弹窗顶栏 ==================== */
+.edgeever-gh-modal-header {
+  height: 64px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ee-gh-border);
+  background: var(--ee-gh-bg);
+  flex-shrink: 0;
+}
+
+.edgeever-gh-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.edgeever-gh-logo-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1f2328 0%, #24292f 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.edgeever-gh-logo-box svg {
+  width: 24px;
+  height: 24px;
+  fill: #ffffff;
+}
+
+.edgeever-gh-title-group h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ee-gh-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edgeever-gh-version-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 12px;
+  background: rgba(9, 105, 218, 0.12);
+  color: var(--ee-gh-primary);
+}
+
+.edgeever-gh-subtitle {
+  font-size: 12px;
+  color: var(--ee-gh-text-muted);
+  margin-top: 2px;
+}
+
+/* 顶栏周期 Tab 切换 */
+.edgeever-gh-range-tabs {
+  display: flex;
+  background: var(--ee-gh-card-bg);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--ee-gh-border);
+}
+
+.edgeever-gh-tab-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ee-gh-text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.edgeever-gh-tab-btn.is-active {
+  background: var(--ee-gh-bg);
+  color: var(--ee-gh-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.edgeever-gh-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--ee-gh-text-muted);
+  font-size: 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.edgeever-gh-close-btn:hover {
+  background: rgba(128, 128, 128, 0.14);
+  color: var(--ee-gh-text);
+}
+
+/* ==================== 4. 双栏主体布局 ==================== */
+.edgeever-gh-modal-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 左侧：筛选与参数控制 */
+.edgeever-gh-sidebar {
+  width: 310px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--ee-gh-border);
+  background: var(--ee-gh-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.edgeever-gh-sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.edgeever-gh-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.edgeever-gh-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ee-gh-text);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.edgeever-gh-form-hint {
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--ee-gh-text-muted);
+}
+
+/* 分类胶囊标签组 */
+.edgeever-gh-capsule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.edgeever-gh-capsule-btn {
+  border: 1px solid var(--ee-gh-border);
+  background: var(--ee-gh-card-bg);
+  color: var(--ee-gh-text);
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.edgeever-gh-capsule-btn:hover {
+  border-color: var(--ee-gh-primary);
+  background: var(--ee-gh-bg);
+}
+
+.edgeever-gh-capsule-btn.is-active {
+  background: rgba(9, 105, 218, 0.08);
+  border-color: var(--ee-gh-primary);
+  color: var(--ee-gh-primary);
+  font-weight: 600;
+}
+
+/* 下拉与输入框通用 */
+.edgeever-gh-select,
+.edgeever-gh-input {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  color: var(--ee-gh-text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.edgeever-gh-select:focus,
+.edgeever-gh-input:focus {
+  border-color: var(--ee-gh-primary);
+  background: var(--ee-gh-bg);
+}
+
+/* 按钮组 Segmented */
+.edgeever-gh-segment-bar {
+  display: flex;
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.edgeever-gh-segment-bar button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--ee-gh-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 0;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.edgeever-gh-segment-bar button.is-active {
+  background: var(--ee-gh-bg);
+  color: var(--ee-gh-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* 底部操作栏 */
+.edgeever-gh-sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--ee-gh-border);
+  background: var(--ee-gh-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edgeever-gh-btn-primary {
+  width: 100%;
+  height: 38px;
+  border: none;
+  background: linear-gradient(135deg, #2ea44f 0%, #238636 100%);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 6px rgba(35, 134, 54, 0.25);
+  transition: all 0.18s ease;
+}
+
+.edgeever-gh-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(35, 134, 54, 0.35);
+}
+
+.edgeever-gh-btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.edgeever-gh-btn-secondary {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--ee-gh-border);
+  background: var(--ee-gh-card-bg);
+  color: var(--ee-gh-text);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.edgeever-gh-btn-secondary:hover:not(:disabled) {
+  background: var(--ee-gh-bg);
+  border-color: var(--ee-gh-text-muted);
+}
+
+/* ==================== 5. 右侧：内容与预览主面板 ==================== */
+.edgeever-gh-main-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--ee-gh-card-bg);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.edgeever-gh-pane-header {
+  height: 44px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--ee-gh-border);
+  background: var(--ee-gh-bg);
+  flex-shrink: 0;
+}
+
+.edgeever-gh-view-toggle {
+  display: flex;
+  gap: 12px;
+}
+
+.edgeever-gh-view-tab {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ee-gh-text-muted);
+  cursor: pointer;
+  padding: 10px 0;
+  position: relative;
+  transition: color 0.15s;
+}
+
+.edgeever-gh-view-tab.is-active {
+  color: var(--ee-gh-primary);
+}
+
+.edgeever-gh-view-tab.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--ee-gh-primary);
+  border-radius: 2px 2px 0 0;
+}
+
+.edgeever-gh-pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edgeever-gh-pill-action {
+  font-size: 12px;
+  color: var(--ee-gh-text-muted);
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s;
+}
+
+.edgeever-gh-pill-action:hover {
+  color: var(--ee-gh-primary);
+  border-color: var(--ee-gh-primary);
+}
+
+.edgeever-gh-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ==================== 6. 热榜卡片列表 (Live Cards) ==================== */
+.edgeever-gh-cards-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edgeever-gh-card {
+  background: var(--ee-gh-bg);
+  border: 1px solid var(--ee-gh-border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: var(--ee-gh-shadow-sm);
+  transition: all 0.18s ease;
+  position: relative;
+}
+
+.edgeever-gh-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ee-gh-shadow-md);
+  border-color: #8c959f;
+}
+
+.edgeever-gh-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edgeever-gh-repo-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.edgeever-gh-rank-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--ee-gh-card-bg);
+  border: 1px solid var(--ee-gh-border);
+  color: var(--ee-gh-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edgeever-gh-card:nth-child(1) .edgeever-gh-rank-badge {
+  background: #fef08a;
+  color: #854d0e;
+  border-color: #facc15;
+}
+
+.edgeever-gh-card:nth-child(2) .edgeever-gh-rank-badge {
+  background: #e2e8f0;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.edgeever-gh-card:nth-child(3) .edgeever-gh-rank-badge {
+  background: #fed7aa;
+  color: #9a3412;
+  border-color: #fb923c;
+}
+
+.edgeever-gh-repo-link {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ee-gh-primary);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edgeever-gh-repo-link:hover {
+  text-decoration: underline;
+}
+
+.edgeever-gh-card-stars-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(46, 164, 79, 0.1);
+  color: #2da44e;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.edgeever-gh-card-desc {
+  margin: 10px 0 12px 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ee-gh-text);
+  word-break: break-word;
+}
+
+.edgeever-gh-card-bottom {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--ee-gh-text-muted);
+}
+
+.edgeever-gh-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.edgeever-gh-lang-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ==================== 7. AI 深度报告与 Markdown 预览区 ==================== */
+.edgeever-gh-report-paper {
+  background: var(--ee-gh-bg);
+  border: 1px solid var(--ee-gh-border);
+  border-radius: 10px;
+  padding: 36px 42px;
+  min-height: 100%;
+  box-shadow: var(--ee-gh-shadow-sm);
+  line-height: 1.7;
+}
+
+/* 生成中的炫酷流光进度条与骨架动效 */
+.edgeever-gh-ai-loading-box {
+  padding: 60px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 18px;
+}
+
+.edgeever-gh-ai-spinner {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 3.5px solid rgba(9, 105, 218, 0.15);
+  border-top-color: var(--ee-gh-primary);
+  border-right-color: var(--ee-gh-purple);
+  animation: eeGhSpin 1s linear infinite;
+}
+
+@keyframes eeGhSpin {
+  to { transform: rotate(360deg); }
+}
+
+.edgeever-gh-loading-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ee-gh-text);
+}
+
+.edgeever-gh-loading-desc {
+  font-size: 13px;
+  color: var(--ee-gh-text-muted);
+  max-width: 460px;
+  line-height: 1.6;
+}
+
+.edgeever-gh-progress-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(130, 80, 223, 0.12);
+  color: var(--ee-gh-purple);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 14px;
+}
+
+/* 报告排版细节 */
+.edgeever-gh-report-paper h1 {
+  font-size: 24px;
+  font-weight: 800;
+  margin-top: 0;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ee-gh-border);
+  color: var(--ee-gh-text);
+}
+
+.edgeever-gh-report-paper h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 24px;
+  margin-bottom: 10px;
+  color: var(--ee-gh-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edgeever-gh-report-paper blockquote {
+  margin: 12px 0;
+  padding: 8px 16px;
+  background: var(--ee-gh-card-bg);
+  border-left: 4px solid var(--ee-gh-primary);
+  border-radius: 0 6px 6px 0;
+  color: var(--ee-gh-text-muted);
+  font-size: 13.5px;
+}
+
+.edgeever-gh-report-paper table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 18px 0;
+  font-size: 13px;
+}
+
+.edgeever-gh-report-paper th,
+.edgeever-gh-report-paper td {
+  border: 1px solid var(--ee-gh-border);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.edgeever-gh-report-paper th {
+  background: var(--ee-gh-card-bg);
+  font-weight: 600;
+}
+
+.edgeever-gh-report-paper ul {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.edgeever-gh-report-paper li {
+  margin-bottom: 6px;
+}
