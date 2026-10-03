@@ -975,7 +975,7 @@ function openConsoleModal(context) {
           <div class="edgeever-gh-title-group">
             <h2>
               开源热搜与竞品调研
-              <span class="edgeever-gh-version-badge">v1.2.4</span>
+              <span class="edgeever-gh-version-badge">v1.2.5</span>
             </h2>
             <div class="edgeever-gh-subtitle">GitHub 开源热榜 (日/周/月) & 竞品对标调研，一键稍后阅读</div>
           </div>
@@ -1767,7 +1767,7 @@ async function syncSchedule(context) {
 export default {
   activate(context) {
     let settings = {
-      buttonPosition: "toolbar",
+      buttonPosition: "dock",
     };
 
     async function loadSettings() {
@@ -1905,14 +1905,52 @@ export default {
         .forEach((b) => b.remove());
     }
 
+    function getOrCreatePluginDock() {
+      let dock = document.getElementById("edgeever-plugins-dock");
+      if (!dock) {
+        dock = document.createElement("div");
+        dock.id = "edgeever-plugins-dock";
+        dock.className = "edgeever-plugins-dock";
+        document.body.appendChild(dock);
+      }
+      // 检查是否有由于其他插件单独挂在 body 上的孤立悬浮按钮（例如增强导出按钮），将其一并纳入 Dock 中纵向排队，杜绝重叠遮挡
+      try {
+        const exportBtn = document.getElementById("edgeever-enhancing-export-btn");
+        if (exportBtn && exportBtn.parentElement === document.body) {
+          dock.appendChild(exportBtn);
+        }
+      } catch (e) {}
+      return dock;
+    }
+
+    function findSidebarFooter() {
+      const selectors = [
+        ".edgeever-workspace-sidebar-footer",
+        ".edgeever-workspace-sidebar footer",
+        ".sidebar-footer",
+        "[class*='sidebar-footer']",
+        ".edgeever-workspace-sidebar [class*='footer']",
+        ".edgeever-workspace-sidebar",
+      ];
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el) return el;
+      }
+      return null;
+    }
+
     function findToolbar() {
       const selectors = [
+        ".edgeever-workspace-editor header .actions",
+        ".edgeever-workspace-editor header",
         ".edgeever-editor-toolbar",
         ".ProseMirror-menubar",
         ".tiptap-toolbar",
         '[role="toolbar"]',
         ".editor-toolbar",
         ".note-editor-toolbar",
+        ".edgeever-workspace-editor [class*='header-action']",
+        ".edgeever-workspace-editor [class*='header']",
       ];
       for (const sel of selectors) {
         const el = document.querySelector(sel);
@@ -1927,12 +1965,26 @@ export default {
         return;
       }
 
+      // 如果当前按钮已经挂载在正确容器中，不重复操作
       if (currentBtn && currentBtn.isConnected) {
-        return;
+        if (settings.buttonPosition === "dock" && currentBtn.parentElement?.id !== "edgeever-plugins-dock") {
+          cleanupButton();
+        } else if (settings.buttonPosition === "sidebar" && !currentBtn.classList.contains("is-sidebar-btn")) {
+          cleanupButton();
+        } else if (settings.buttonPosition === "toolbar" && !currentBtn.classList.contains("is-toolbar-btn")) {
+          cleanupButton();
+        } else {
+          return;
+        }
       }
 
       const existing = document.getElementById("edgeever-github-hot-btn");
       if (existing && existing.isConnected) {
+        if (settings.buttonPosition === "dock" && existing.parentElement?.id !== "edgeever-plugins-dock") {
+          const dock = getOrCreatePluginDock();
+          dock.appendChild(existing);
+          existing.className = "edgeever-gh-hot-btn is-dock-btn";
+        }
         currentBtn = existing;
         return;
       }
@@ -1956,6 +2008,19 @@ export default {
         openConsoleModal(context);
       });
 
+      // 1. 左侧边栏底部模式 (全局常驻且完全不占用正文空间)
+      if (settings.buttonPosition === "sidebar") {
+        const sidebar = findSidebarFooter();
+        if (sidebar) {
+          btn.className = "edgeever-gh-hot-btn is-sidebar-btn";
+          btn.innerHTML = svgIcon;
+          sidebar.appendChild(btn);
+          currentBtn = btn;
+          return;
+        }
+      }
+
+      // 2. 编辑器工具栏模式 (嵌入顶部工具栏/标题栏操作区)
       if (settings.buttonPosition === "toolbar") {
         const tb = findToolbar();
         if (tb) {
@@ -1967,10 +2032,11 @@ export default {
         }
       }
 
-      // 悬浮模式 (安全位于原生 AI 唤出按钮上方)
-      btn.className = "edgeever-gh-hot-btn is-fab";
+      // 3. 统一插件工具坞 (Plugin Dock - 自动弹性纵向排队，彻底消除重叠遮挡)
+      const dock = getOrCreatePluginDock();
+      btn.className = "edgeever-gh-hot-btn is-dock-btn";
       btn.innerHTML = svgIcon;
-      document.body.appendChild(btn);
+      dock.appendChild(btn);
       currentBtn = btn;
     }
 

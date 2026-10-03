@@ -77,31 +77,95 @@
   fill: currentColor;
 }
 
-/* 悬浮按钮形态 (FAB) */
-.edgeever-gh-hot-btn.is-fab {
+/* 统一插件悬浮工具坞 (Plugin Dock - 防止多个插件悬浮按钮相互重合覆盖) */
+#edgeever-plugins-dock,
+.edgeever-plugins-dock {
   position: fixed;
-  right: 28px;
-  bottom: 84px; /* 避开原生右下角 AI 唤出按钮 */
+  right: 24px;
+  bottom: 84px; /* 避开系统原生最底部的唤出按钮 */
+  display: flex;
+  flex-direction: column-reverse; /* 从下往上垂直生长排列，整齐优雅 */
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  z-index: 9980;
+  pointer-events: none;
+}
+
+#edgeever-plugins-dock > *,
+.edgeever-plugins-dock > * {
+  position: static !important;
+  pointer-events: auto !important;
+  margin: 0 !important;
+  transform: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#edgeever-plugins-dock > *:hover,
+.edgeever-plugins-dock > *:hover {
+  transform: translateY(-2px) scale(1.06) !important;
+}
+
+/* 悬浮按钮形态 (FAB / Dock 按钮) */
+.edgeever-gh-hot-btn.is-fab,
+.edgeever-gh-hot-btn.is-dock-btn {
   width: 44px;
   height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 22px;
   background: linear-gradient(135deg, #1f2328 0%, #0d1117 100%);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-  z-index: 9980;
+  cursor: pointer;
 }
 
-.edgeever-gh-hot-btn.is-fab:hover {
+.edgeever-gh-hot-btn.is-fab:hover,
+.edgeever-gh-hot-btn.is-dock-btn:hover {
   background: linear-gradient(135deg, #2d333b 0%, #161b22 100%);
-  transform: translateY(-2px) scale(1.05);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
-.edgeever-gh-hot-btn.is-fab svg {
+.edgeever-gh-hot-btn.is-fab svg,
+.edgeever-gh-hot-btn.is-dock-btn svg {
   width: 22px;
   height: 22px;
   fill: #ffffff;
+}
+
+/* 独立悬浮状态兜底 (仅在没有 Dock 时生效) */
+.edgeever-gh-hot-btn.is-fab-standalone {
+  position: fixed;
+  right: 24px;
+  bottom: 140px; /* 独立悬浮时主动错开位置，不与导出按钮(84px)重合 */
+  z-index: 9980;
+}
+
+/* 侧边栏底部常驻按钮形态 */
+.edgeever-gh-hot-btn.is-sidebar-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  margin: 0 3px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--ee-gh-text);
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.edgeever-gh-hot-btn.is-sidebar-btn:hover {
+  background-color: rgba(128, 128, 128, 0.14);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.edgeever-gh-hot-btn.is-sidebar-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 /* ==================== 2. 模态弹窗遮罩与主容器 ==================== */

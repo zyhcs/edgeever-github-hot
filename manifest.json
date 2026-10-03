@@ -2,7 +2,7 @@
   "type": "plugin",
   "id": "org.edgeever.plugins.github-hot",
   "name": "GitHub Hot Digest",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "apiVersion": "2",
   "settingsUi": "host",
   "description": "Daily, Weekly & Monthly GitHub Trending Digest with custom category search & competitive benchmark reports. Powered by EdgeEver native AI or LLM proxies.",
@@ -137,12 +137,13 @@
       {
         "key": "button_position",
         "type": "select",
-        "label": "热榜日报入口按钮位置",
-        "default": "toolbar",
+        "label": "热榜入口按钮显示位置 (解决多插件遮挡痛点)",
+        "default": "dock",
         "options": [
-          { "value": "toolbar", "label": "嵌入编辑器工具栏末尾 (原生图标，推荐)" },
-          { "value": "fab", "label": "右下角悬浮按钮 (避开原生 AI 按钮)" },
-          { "value": "hidden", "label": "隐藏按钮 (仅通过命令面板唤出)" }
+          { "value": "dock", "label": "🧩 统一插件悬浮工具坞 (自动纵向排队，绝不遮挡其他插件，推荐)" },
+          { "value": "sidebar", "label": "📁 左侧边栏底部 (与设置齿轮并列，全局常驻且不占正文)" },
+          { "value": "toolbar", "label": "📝 嵌入编辑器顶部工具栏 (仅打开笔记时在标题栏显示)" },
+          { "value": "hidden", "label": "🚫 隐藏按钮 (仅通过快捷键或命令面板唤出)" }
         ]
       },
       {
