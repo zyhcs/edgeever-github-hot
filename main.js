@@ -53,6 +53,9 @@ function getLanguageColor(lang) {
   return LANG_COLORS[key] || "#8b949e";
 }
 
+// 全局已收藏项目集合 (模块顶级作用域，保证所有函数共享且实时同步)
+let bookmarkedReposSet = new Set();
+
 function escapeHtml(str) {
   return String(str || "")
     .replace(/&/g, "&amp;")
@@ -730,7 +733,7 @@ async function bookmarkRepository(context, item, buttonEl = null) {
             ? fullNote.contentMarkdown
             : bookmarkNote.contentMarkdown || "";
 
-        const chunks = oldContent.split(/\n+---\n*/).map((c) => c.trim()).filter(Boolean);
+        const chunks = oldContent.split(/\r?\n+---\r?\n*/).map((c) => c.trim()).filter(Boolean);
         const remainingChunks = chunks.filter(
           (c) =>
             !c.includes(`[${fullName}]`) &&
@@ -745,9 +748,15 @@ async function bookmarkRepository(context, item, buttonEl = null) {
           newContent = remainingChunks.map((c) => c + "\n\n---").join("\n\n");
         }
 
-        await context.notes.update(bookmarkNote.id, {
-          contentMarkdown: newContent,
-        });
+        try {
+          await context.notes.update(bookmarkNote.id, {
+            title: bookmarkNote.title || bookmarkNoteTitle,
+            contentMarkdown: newContent,
+            tags: Array.from(new Set([...(bookmarkNote.tags || []), "GitHub收藏", "GitHub稍后阅读", "开源灵感"])),
+          });
+        } catch (updateErr) {
+          console.error("[GitHub Hot] context.notes.update unbookmark error:", updateErr);
+        }
       }
 
       context.ui?.showNotice?.(`已将【${fullName}】从稍后阅读清单中移除！`);
@@ -788,10 +797,15 @@ async function bookmarkRepository(context, item, buttonEl = null) {
         newContent = cardMarkdown + "\n\n" + trimmedOld;
       }
 
-      await context.notes.update(bookmarkNote.id, {
-        contentMarkdown: newContent,
-        tags: Array.from(new Set([...(bookmarkNote.tags || []), "GitHub收藏", "GitHub稍后阅读", "开源灵感"])),
-      });
+      try {
+        await context.notes.update(bookmarkNote.id, {
+          title: bookmarkNote.title || bookmarkNoteTitle,
+          contentMarkdown: newContent,
+          tags: Array.from(new Set([...(bookmarkNote.tags || []), "GitHub收藏", "GitHub稍后阅读", "开源灵感"])),
+        });
+      } catch (updateErr) {
+        console.error("[GitHub Hot] context.notes.update bookmark error:", updateErr);
+      }
       context.ui?.showNotice?.(`已将【${fullName}】加入稍后阅读清单！`);
     } else {
       const created = await context.notes.create({
@@ -944,7 +958,6 @@ function openConsoleModal(context) {
   let activeTab = "cards"; // "cards" | "report"
   let isGenerating = false;
   let userCustomKeywords = ["markdown note", "knowledge base", "pkm", "ai agent", "mcp"];
-  let bookmarkedReposSet = new Set();
 
   const backdrop = document.createElement("div");
   backdrop.className = "edgeever-gh-modal-backdrop";
@@ -962,7 +975,7 @@ function openConsoleModal(context) {
           <div class="edgeever-gh-title-group">
             <h2>
               开源热搜与竞品调研
-              <span class="edgeever-gh-version-badge">v1.2.3</span>
+              <span class="edgeever-gh-version-badge">v1.2.4</span>
             </h2>
             <div class="edgeever-gh-subtitle">GitHub 开源热榜 (日/周/月) & 竞品对标调研，一键稍后阅读</div>
           </div>
@@ -1398,6 +1411,9 @@ function openConsoleModal(context) {
           bmBtn.disabled = true;
           try {
             await bookmarkRepository(context, it, bmBtn);
+          } catch (err) {
+            console.error("[GitHub Hot] bookmark toggle failed:", err);
+            context.ui?.showNotice?.("收藏状态更新失败：" + (err?.message || err));
           } finally {
             bmBtn.disabled = false;
           }

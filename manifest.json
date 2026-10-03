@@ -2,7 +2,7 @@
   "type": "plugin",
   "id": "org.edgeever.plugins.github-hot",
   "name": "GitHub Hot Digest",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "apiVersion": "2",
   "settingsUi": "host",
   "description": "Daily, Weekly & Monthly GitHub Trending Digest with custom category search & competitive benchmark reports. Powered by EdgeEver native AI or LLM proxies.",
